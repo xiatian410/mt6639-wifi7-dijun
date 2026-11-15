@@ -241,6 +241,7 @@ process_one() { echo process >> "$D/calls"; }
                 "softap_native_once.sh", "softap_native_config.sh", "hostapd",
                 "hostapd_cli", "delete_ifindex", "native-tether.dex",
                 "softap-profile.dex", "twt_recover.sh", "ap.key",
+                "hotspot-identity.sh", "hotspot-upstream.sh", "compat.sh", "compatibility.conf",
                 "reconnect.key", "ap.conf", ".stage-error",
             ]
             for name in known:
@@ -337,6 +338,7 @@ process_one() { echo process >> "$D/calls"; }
                     "module.prop", "module.prop.template", "config.conf", "customize.sh", "action.sh", "service.sh",
                     "bin/control.sh", "bin/hostapd", "bin/hostapd_cli",
                     "bin/status_snapshot.sh", "bin/status-card.sh", "bin/verify-module.sh",
+                    "bin/hotspot-identity.sh", "bin/hotspot-upstream.sh", "bin/compat.sh", "bin/compatibility.conf",
                     "bin/request_worker.sh",
                     "bin/softap_once.sh", "bin/softap_profile.sh",
                     "bin/softap_24g_once.sh",
@@ -356,6 +358,8 @@ process_one() { echo process >> "$D/calls"; }
                 self.assertNotIn("  module.prop\n", sums)
                 self.assertNotIn("  customize.sh\n", sums)
                 self.assertEqual(archive.read("module.prop"), archive.read("module.prop.template"))
+                self.assertEqual(archive.read("bin/compat.sh"), (REPO / "modules/mt6639-6g/bin/compat.sh").read_bytes())
+                self.assertEqual(archive.read("bin/compatibility.conf"), (REPO / "modules/mt6639-6g/compatibility.conf").read_bytes())
 
                 # KernelSU installer.sh (200818cabf8f) sources customize.sh,
                 # then deletes it and README.md. Test the installed layout,
@@ -379,7 +383,7 @@ process_one() { echo process >> "$D/calls"; }
                                       else line for line in prop.read_text().splitlines()) + '\n')
             self.assertEqual(verify().returncode, 0)
             original = prop.read_bytes()
-            prop.write_text(prop.read_text().replace('versionCode=33', 'versionCode=99'))
+            prop.write_text(prop.read_text().replace('versionCode=34', 'versionCode=99'))
             self.assertNotEqual(verify().returncode, 0)
             prop.write_bytes(original)
             asset = installed / "bin/control.sh"

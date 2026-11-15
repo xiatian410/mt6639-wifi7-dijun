@@ -259,7 +259,8 @@ discard_staged_task() {
     rm -f "$task/softap_native_once.sh" "$task/softap_native_config.sh" \
         "$task/hostapd" "$task/hostapd_cli" "$task/delete_ifindex" \
         "$task/native-tether.dex" "$task/softap-profile.dex" \
-        "$task/twt_recover.sh" "$task/ap.key" "$task/reconnect.key" \
+        "$task/twt_recover.sh" "$task/hotspot-identity.sh" "$task/hotspot-upstream.sh" \
+        "$task/compat.sh" "$task/compatibility.conf" "$task/ap.key" "$task/reconnect.key" \
         "$task/reconnect-2g.key" "$task/ap.conf" "$task/.stage-error" || return 74
     rmdir "$task" || return 76
 }
@@ -267,17 +268,23 @@ discard_staged_task() {
 stage_native_task() {
     task=$1 upstream_key=$2
     for f in softap_native_once.sh softap_native_config.sh hostapd hostapd_cli \
-        delete_ifindex native-tether.dex softap-profile.dex twt_recover.sh; do
+        delete_ifindex native-tether.dex softap-profile.dex twt_recover.sh \
+        hotspot-identity.sh hotspot-upstream.sh compat.sh compatibility.conf; do
         cp "$MODDIR/bin/$f" "$task/$f" || {
             printf 'stage_failed_%s\n' "$f" > "$task/.stage-error"
             return 70
         }
     done
-    cp "$PRIVATE/ap.key" "$task/ap.key" &&
+    cp "$PRIVATE/ap.key" "$task/ap.key" || {
+            printf 'private_stage_failed\n' > "$task/.stage-error"
+            return 70
+        }
+    if [ "$upstream_key" != none ]; then
         cp "$PRIVATE/$upstream_key" "$task/$upstream_key" || {
             printf 'private_stage_failed\n' > "$task/.stage-error"
             return 70
         }
+    fi
     chmod 0700 "$task"/*.sh "$task/hostapd" "$task/hostapd_cli" "$task/delete_ifindex" &&
         chmod 0600 "$task"/*.key "$task"/*.dex || {
             printf 'stage_permission_failed\n' > "$task/.stage-error"
@@ -327,18 +334,33 @@ start_session() {
         return 73
     fi
     sha_ok || { log 'REJECT module_asset_hash_mismatch'; return 69; }
-    case "$band" in
-        2g) upstream_key=reconnect-2g.key ;;
-        5g) upstream_key=reconnect-2g.key ;;
-        6g) upstream_key=reconnect.key ;;
-        *) log 'REJECT unsupported_band'; return 64 ;;
-    esac
-    for f in ap.key "$upstream_key"; do
+    # AP credentials are always required, before any identity/status work.
+    f=ap.key
+    p=$PRIVATE/$f
+    [ -d "$PRIVATE" ] && [ ! -L "$PRIVATE" ] && [ -f "$p" ] && [ ! -L "$p" ] &&
+        [ "$(stat -c %u "$p")" = 0 ] && [ "$(stat -c %a "$p")" = 600 ] || {
+            log "REJECT private_file_invalid $f"; return 66; }
+    identity=$(sh "$MODDIR/bin/hotspot-identity.sh" "$MODDIR/bin" 2>&1) || {
+        log "$identity"; return 69;
+    }
+    log "$identity"
+    upstream_mode=$(sh "$MODDIR/bin/hotspot-upstream.sh" "${MT6639_HOTSPOT_UPSTREAM:-auto}" "$band") || {
+        log 'REJECT upstream_preflight_failed'; return 69;
+    }
+    upstream_key=none
+    if [ "$upstream_mode" = wifi ]; then
+        case "$band" in
+            2g|5g) upstream_key=reconnect-2g.key ;;
+            6g) upstream_key=reconnect.key ;;
+        esac
+    fi
+    if [ "$upstream_key" != none ]; then
+        f=$upstream_key
         p=$PRIVATE/$f
         [ -d "$PRIVATE" ] && [ ! -L "$PRIVATE" ] && [ -f "$p" ] && [ ! -L "$p" ] &&
             [ "$(stat -c %u "$p")" = 0 ] && [ "$(stat -c %a "$p")" = 600 ] || {
                 log "REJECT private_file_invalid $f"; return 66; }
-    done
+    fi
     if [ -e "$TASK_FILE" ]; then
         if active_checked; then log 'state=already_active'; return 0; fi
         stop_session || return $?
@@ -374,7 +396,7 @@ start_session() {
         abort_staged_start "$task" session_publish 70 1
         return 70
     fi
-    MT6639_HOTSPOT_UPSTREAM=${MT6639_HOTSPOT_UPSTREAM:-wifi} \
+    MT6639_HOTSPOT_UPSTREAM=$upstream_mode \
         MODULE_GUARD_DIR=$MODDIR GUARDIAN_HOLD_SECONDS=$hold nohup setsid sh \
         "$task/softap_native_once.sh" "$task" run-tether "$band" "$width" \
         > "$task/session.log" 2>&1 < /dev/null &

@@ -1,6 +1,6 @@
 # MT6639 Native EHT Hotspot
 
-当前维护候选为 **v0.2.25-dijun.1 / code33**。修复 v0.2.24 安装后完整性检查拒绝：KernelSU 在安装结束时删除 `customize.sh`，它不应出现在运行时的 `SHA256SUMS` 中。其余静态脚本、原生程序、DEX 和元数据模板仍校验；动态描述更新方式不变。请安装新构建包，不要在设备上重生成校验清单或绕过校验。本次未验证实机热点启动或客户端联网。
+当前维护候选为 **v0.2.26-dijun.1 / code34**。原生热点不再按旧 OTA fingerprint 拒绝已核对内核/驱动；蜂窝和普通 Wi-Fi 上游不再强制提供实验网络恢复口令。修复 v0.2.24 安装后完整性检查拒绝：KernelSU 在安装结束时删除 `customize.sh`，它不应出现在运行时的 `SHA256SUMS` 中。其余静态脚本、原生程序、DEX 和元数据模板仍校验；动态描述更新方式不变。请安装新构建包，不要在设备上重生成校验清单或绕过校验。本次未验证实机热点启动或客户端联网。
 
 这是显式操作型实验模块，默认关闭。KernelSU 的“操作”按钮在空闲时启动独立 6GHz EHT 热点，在已有会话时执行 checked stop。源码候选已通过独立的 Settings 请求桥接线，提供受 readiness 门禁保护的频段/带宽选择、启动与停止；不接管原厂热点总开关。下文 v0.2.9/code17、UI v0.2.6/code12 及部署状态为历史记录，不代表当前候选。历史固定哈希及安装前提见[交付手册](../../docs/交付-MT6639候选安装与回滚-20261026.md)。已冻结的历史ZIP字节保持不变，本文的后续说明不代表包内历史README已更新。
 
@@ -11,19 +11,21 @@
 私有文件放在 `/data/adb/mt6639-hotspot/private/`，目录 0700、文件 0600、root所属：
 
 - `ap.key`：独立热点口令，单行 8–63 个可打印 ASCII 字符。
-- `reconnect.key`：原 LabNet-6G 口令，用于 6GHz AP profile 的上游验证/恢复。
-- `reconnect-2g.key`：原 LabNet-2.4G 口令，仅由 5GHz AP profile 使用；缺失时 5GHz 候选会在无线操作前拒绝。
+- `reconnect.key`：仅指定实验网络 `wifi` 模式的 6GHz AP profile 需要，用于 LabNet-6G 上游验证/恢复；蜂窝 `cell` 和普通 Wi-Fi `wifi-any` 模式不需要。
+- `reconnect-2g.key`：指定实验网络 `wifi` 模式的 2.4/5GHz 原生 AP profile 使用；`cell`、`wifi-any` 不需要。C02 一次性 framework 实验是独立入口，仍保留其原有条件。
 
-模块包和 Git 仓库都不包含这些密钥文件。缺少时 action 会拒绝启动；状态快照只公开
+模块包和 Git 仓库都不包含这些密钥文件。`ap.key` 始终必需，上游恢复口令按本次解析的模式检查；状态快照只公开
 对应布尔 readiness，不公开口令内容。
 
 ## 前置条件
 
-- Dijun 固定 fingerprint、原厂 WLAN ko 与模块版本锁通过。
+- 原生热点：Dijun、SDK 37、已审查的内核/原厂 WLAN 驱动组合与模块完整性通过。不按系统显示版本放行或拒绝；组件未知时仍拒绝。共享服务 JAR 和原生构件继续按原哈希核对。
 - SELinux Enforcing；Permissive 下拒绝启动，避免把宽容窗口当成产品状态。
 - KernelSU action 在 root/`u:r:ksu:s0` 执行。
 - `mt6639-6g` 事务正常，`mt6639-hotspot` 不在 `disable/remove` 状态。
-- 6GHz profile要求当前 STA 是 LabNet-6G/6135MHz。5GHz profile要求当前 STA 是 LabNet-2.4G/2412MHz、BSSID `02:00:00:02:73:1a`，避免重演固定6GHz STA上游把5GHz AP迁到6135MHz的冲突。
+- 默认 `MT6639_HOTSPOT_UPSTREAM=auto`：Wi-Fi 开启但未连接网络时选择 `cell`（需移动数据）；连接指定实验网络时选择 `wifi`；其他已连接网络选择 `wifi-any`。控制器解析一次，runner 启动前重查并沿用所选模式，所选模式与当前连接状态不再相符时会拒绝。
+- `cell`、`wifi-any` 仅需 `ap.key`。原有频段并发限制继续保留：例如 6GHz AP 不接受 2.4/5GHz STA 上游；Wi-Fi 关闭时驱动不可用，不能启动蜂窝共享热点。
+- 指定实验网络 `wifi` 模式保留原 SSID/频率/BSSID 及恢复口令检查；不要用假口令填补文件。旧 C02 framework 入口尚未纳入新版内核/驱动适配。
 
 ## 状态
 

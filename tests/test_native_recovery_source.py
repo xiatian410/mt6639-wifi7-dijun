@@ -72,8 +72,11 @@ class UpstreamModeSourceTests(unittest.TestCase):
     """The uplink contract must be decided once, recorded, and honoured twice."""
 
     def test_auto_mode_is_resolved_and_recorded(self):
-        self.assertIn('UPSTREAM_MODE_REQUEST=${MT6639_HOTSPOT_UPSTREAM:-auto}', SOURCE)
-        self.assertIn("wifi|wifi-any|cell|auto", SOURCE)
+        helper = (ROOT / "modules/mt6639-hotspot/bin/hotspot-upstream.sh").read_text()
+        self.assertIn('"$D/hotspot-upstream.sh" "${MT6639_HOTSPOT_UPSTREAM:-auto}" "$BAND" "$D/sta.before"', SOURCE)
+        self.assertIn("auto|wifi|wifi-any|cell", helper)
+        self.assertIn('request=cell', helper)
+        self.assertIn('request=wifi-any', helper)
         self.assertIn('printf \'%s\\n\' "$UPSTREAM_MODE" > "$D/upstream.mode"', SOURCE)
         # auto must inspect the live STA state before it writes the record
         self.assertLess(SOURCE.index('cmd wifi status > "$D/sta.before"'),

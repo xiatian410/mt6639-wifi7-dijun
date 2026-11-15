@@ -2,7 +2,7 @@
 
 ## 本 fork 当前维护
 
-2026-11-16：热点 **v0.2.25-dijun.1** 修复动态状态卡版本安装后出现的 `module_asset_hash_mismatch`：KernelSU 会删除仅供安装使用的 `customize.sh`，运行时校验清单现在只包含安装后保留的文件。动态状态卡继续显示状态、频段、配置带宽、配置文件就绪情况、恢复结果及最近操作。[热点候选下载](https://github.com/xiatian410/mt6639-wifi7-dijun/releases/tag/hotspot-v0.2.25-dijun.1) · [使用说明](modules/mt6639-hotspot/README.md#动态模块状态卡v0224-dijun1)。
+2026-11-16：热点 **v0.2.26-dijun.1** 修复无条件要求 `reconnect.key` 的启动门槛：蜂窝共享与普通 Wi-Fi 上游只需本机 `ap.key`，指定实验网络恢复模式仍需恢复口令。原生热点入口以已核对内核/驱动组合代替旧 OTA fingerprint；未知组合继续拒绝。保留安装清理后的完整性校验修复与动态状态卡。[热点候选下载](https://github.com/xiatian410/mt6639-wifi7-dijun/releases/tag/hotspot-v0.2.26-dijun.1) · [使用说明](modules/mt6639-hotspot/README.md)。软件门槛修正不代表当前设备已完成热点启动、客户端联网或恢复验收。
 
 本批新增 **蓝牙 v0.2.0-dijun.1** 的 OS4 已核对组件适配、恢复重试与状态查询修复，以及 **热点 v0.2.23-dijun.1** 的直接入口目录验证。蓝牙不再因 OTA 显示版本变化而单独拒绝相同组件；未知 APK 仍拒绝启用。[本批范围、六模块状态与剩余边界](docs/研究-蓝牙组件与模块维护-20261115.md)。 [本批候选下载](https://github.com/xiatian410/mt6639-wifi7-dijun/releases/tag/v0.4.0-dijun.1)。
 

@@ -42,6 +42,9 @@ mkdir "$TMP/module"
 cp -R "$SOURCE"/. "$TMP/module/"
 cp "$SOURCE/module.prop" "$TMP/module/module.prop.template"
 mkdir -p "$TMP/module/bin"
+# Reuse the reviewed kernel/driver table and parser, not an OTA display version.
+cp "$ROOT/modules/mt6639-6g/bin/compat.sh" "$TMP/module/bin/compat.sh"
+cp "$ROOT/modules/mt6639-6g/compatibility.conf" "$TMP/module/bin/compatibility.conf"
 cp "$HOSTDIR/hostapd" "$HOSTDIR/hostapd_cli" "$TMP/module/bin/"
 cp "$DELETE_IFINDEX" "$TMP/module/bin/delete_ifindex"
 cp "$ROOT/tools/softap_native_once.sh" "$ROOT/tools/softap_native_config.sh" \
@@ -53,6 +56,7 @@ chmod 0755 "$TMP/module/customize.sh" "$TMP/module/action.sh" "$TMP/module/servi
     "$TMP/module/uninstall.sh" "$TMP/module/bin/control.sh" "$TMP/module/bin/status_snapshot.sh" \
     "$TMP/module/bin/request_worker.sh" "$TMP/module/bin/android-env.sh" \
     "$TMP/module/bin/status-card.sh" "$TMP/module/bin/verify-module.sh" \
+    "$TMP/module/bin/hotspot-identity.sh" "$TMP/module/bin/hotspot-upstream.sh" \
     "$TMP/module/bin/softap_native_once.sh" "$TMP/module/bin/softap_native_config.sh" \
     "$TMP/module/bin/softap_once.sh" "$TMP/module/bin/softap_profile.sh" \
     "$TMP/module/bin/softap_24g_once.sh" \

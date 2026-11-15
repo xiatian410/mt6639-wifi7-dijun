@@ -525,9 +525,12 @@ flock -n 8 8>&8 || exit 75
 # every retry die here with a bare exit 73.
 rm -f "$D/claimed"
 (set -C; : > "$D/claimed") 2>/dev/null || exit 73
-[ "$(getprop ro.build.fingerprint)" = 'Xiaomi/dijun/dijun:17/CP2A.260605.016/OS4.0.0.19.XODCNXM:user/release-keys' ] || exit 69
-hash=$(sha256sum /vendor/lib/modules/wlan_drv_gen4m_eap_6639.ko) || exit 69
-[ "${hash%% *}" = 54619c2e9521fc084edd4ec93282715ac10e716ad4ae0a27ec5588fb64e618ea ] || exit 69
+# Recheck the staged reviewed identity before any radio mutation. The existing
+# guardian/recover dispatch above deliberately remains independent of this gate.
+if ! sh "$D/hotspot-identity.sh" "$D" > "$D/identity.check" 2>&1; then
+    printf 'hotspot_identity_rejected\n' > "$D/failure"
+    exit 69
+fi
 hash=$(sha256sum "$D/hostapd") || exit 69
 [ "${hash%% *}" = 15023e3bfe6b08415ebcc92479c0cd4fb14adb57b9010266af73bcc1bdc7bc2b ] || exit 69
 hash=$(sha256sum "$D/hostapd_cli") || exit 69
@@ -543,7 +546,7 @@ hostapd_svc=$(getprop init.svc.hostapd)
     [ ! -e "/sys/class/net/$IF" ] ||
     { printf 'hostapd_svc=%s_if=%s\n' "$hostapd_svc" \
         "$( [ -e "/sys/class/net/$IF" ] && echo present || echo absent)" > "$D/failure"; exit 75; }
-[ -s "$D/$UPSTREAM_KEY_NAME" ] && [ -s "$D/ap.conf" ] || exit 66
+[ -s "$D/ap.conf" ] || exit 66
 for file in "$PROFILE" "$D/ap.key" "$D/ap.conf"; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ "$(stat -c %u "$file")" = 0 ] || exit 77
 done
@@ -597,24 +600,14 @@ fi
 #   auto      decide per start from the current STA state (see below)
 # The resolved mode is recorded in $D/upstream.mode so the guardian and any
 # later recover run honour the contract this session actually started with.
-UPSTREAM_MODE_REQUEST=${MT6639_HOTSPOT_UPSTREAM:-auto}
-case "$UPSTREAM_MODE_REQUEST" in
-    wifi|wifi-any|cell|auto) ;;
-    *) printf 'bad_upstream_mode=%s\n' "$UPSTREAM_MODE_REQUEST" > "$D/failure"; exit 64 ;;
-esac
 timeout 5 cmd wifi status > "$D/sta.before" 2>&1 ||
     { printf 'sta_status_unavailable\n' > "$D/failure"; exit 69; }
-UPSTREAM_MODE=$UPSTREAM_MODE_REQUEST
-if [ "$UPSTREAM_MODE" = auto ]; then
-    if grep -Fq "Wifi is connected to \"$UPSTREAM_SSID\"" "$D/sta.before" &&
-        grep -Fq 'Supplicant state: COMPLETED' "$D/sta.before"; then
-        UPSTREAM_MODE=wifi
-    elif grep -Fq 'Wifi is connected to "' "$D/sta.before" &&
-        grep -Fq 'Supplicant state: COMPLETED' "$D/sta.before"; then
-        UPSTREAM_MODE=wifi-any
-    else
-        UPSTREAM_MODE=cell
-    fi
+UPSTREAM_MODE=$(sh "$D/hotspot-upstream.sh" "${MT6639_HOTSPOT_UPSTREAM:-auto}" "$BAND" "$D/sta.before") || {
+    printf 'upstream_preflight_failed\n' > "$D/failure"; exit 69;
+}
+if [ "$UPSTREAM_MODE" = wifi ] && [ ! -s "$D/$UPSTREAM_KEY_NAME" ]; then
+    printf 'missing_upstream_recovery_key\n' > "$D/failure"
+    exit 66
 fi
 printf '%s\n' "$UPSTREAM_MODE" > "$D/upstream.mode" ||
     { printf 'upstream_mode_unwritable\n' > "$D/failure"; exit 74; }
