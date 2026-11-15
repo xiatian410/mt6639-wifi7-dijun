@@ -56,6 +56,8 @@
 
 ## 蓝牙与 LE Audio
 
+- [本 fork：蓝牙组件与六模块维护（2026-11-15）](研究-蓝牙组件与模块维护-20261115.md)
+
 - [MT6639：蓝牙与 LE Audio 只读基线](分析-MT6639蓝牙与LEAudio基线-20261023.md)
 - [蓝牙 LE Audio Host 开放回读（Enforcing / KSU）](验证-蓝牙LEAudio-Host开放回读-20261027.md)
 

@@ -30,8 +30,16 @@ STATE_FILE=$WORK/state
 LOG=$WORK/control.log
 rc=0
 
-[ -d "$WORK" ] || mkdir -p "$WORK"
-chmod 0700 "$WORK"
+# This entry can run independently of request_worker.sh. Validate before any
+# chmod, log, lock or session access; never follow an inherited work symlink.
+work_parent=${WORK%/*}
+[ -d "$work_parent" ] && [ ! -L "$work_parent" ] &&
+    [ "$(stat -c %u "$work_parent")" = 0 ] || exit 77
+[ ! -L "$WORK" ] || exit 77
+if [ ! -e "$WORK" ]; then mkdir -m 0700 "$WORK" || exit 74; fi
+[ -d "$WORK" ] && [ "$(stat -c %u "$WORK")" = 0 ] || exit 77
+chmod 0700 "$WORK" || exit 74
+[ "$(stat -c %a "$WORK")" = 700 ] || exit 77
 log() {
     printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG" 2>/dev/null
     printf '%s\n' "$*"

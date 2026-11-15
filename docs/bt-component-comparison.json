@@ -1,0 +1,79 @@
+{
+  "scope": "Original APK disassembly, normalized isEnabled method comparison; no Android execution, audio or controller validation",
+  "samples": {
+    "os4-current": {
+      "apk_sha256": "22f2e2ac8c036f7716e792f1fa54d7f5c3dd53754cb3c01db93ee3981cd34339",
+      "apk_bytes": 11701770
+    },
+    "os4-stable": {
+      "apk_sha256": "1a5ae65ccd8621c03ca5a6a035979eac74025c3ecdda19dd84f1bbd53162983e",
+      "apk_bytes": 11722250
+    }
+  },
+  "methods": [
+    {
+      "class": "le_audio/LeAudioService",
+      "method": "isEnabled",
+      "hashes": {
+        "os4-current": "d1dab034157f235c45760030fdbb724e9b0e4ad414b6448e60dbae705be0cced",
+        "os4-stable": "d1dab034157f235c45760030fdbb724e9b0e4ad414b6448e60dbae705be0cced"
+      },
+      "equal": true
+    },
+    {
+      "class": "le_audio/LeAudioBroadcast",
+      "method": "isEnabled",
+      "hashes": {
+        "os4-current": "6ab80b4a07238d13773e6a9b331313ea1337bc05ee6aeec8f1dba9c64a8ded5f",
+        "os4-stable": "6ab80b4a07238d13773e6a9b331313ea1337bc05ee6aeec8f1dba9c64a8ded5f"
+      },
+      "equal": true
+    },
+    {
+      "class": "le_audio/LeAudioBroadcast$Companion",
+      "method": "isEnabled",
+      "hashes": {
+        "os4-current": "eeff911dd005e5e06430506e17da0d040cabf07534cf7e1ab6f317bea2401d9f",
+        "os4-stable": "eeff911dd005e5e06430506e17da0d040cabf07534cf7e1ab6f317bea2401d9f"
+      },
+      "equal": true
+    },
+    {
+      "class": "bass_client/BassClientService",
+      "method": "isEnabled",
+      "hashes": {
+        "os4-current": "84175f0e327eb1257e5c30a29c8f007cace3c392fa0e1650c9b7470365069eaa",
+        "os4-stable": "84175f0e327eb1257e5c30a29c8f007cace3c392fa0e1650c9b7470365069eaa"
+      },
+      "equal": true
+    },
+    {
+      "class": "csip/CsipSetCoordinatorService",
+      "method": "isEnabled",
+      "hashes": {
+        "os4-current": "00ecdf343f16b053b1705777502c45b5490f54150e01312f028dea4344206170",
+        "os4-stable": "00ecdf343f16b053b1705777502c45b5490f54150e01312f028dea4344206170"
+      },
+      "equal": true
+    },
+    {
+      "class": "vc/VolumeControlService",
+      "method": "isEnabled",
+      "hashes": {
+        "os4-current": "c3bbfb378abd4501eca9d4ec452909f27f11037a0df2cd35a0798e978384b0f4",
+        "os4-stable": "c3bbfb378abd4501eca9d4ec452909f27f11037a0df2cd35a0798e978384b0f4"
+      },
+      "equal": true
+    },
+    {
+      "class": "mcp/McpService",
+      "method": "isEnabled",
+      "hashes": {
+        "os4-current": "b54e838728ee71f051ad334d9a3b781d930ec5af7ff1ffa96ddb55c3f40f7242",
+        "os4-stable": "b54e838728ee71f051ad334d9a3b781d930ec5af7ff1ffa96ddb55c3f40f7242"
+      },
+      "equal": true
+    }
+  ],
+  "config_review": "Stable Config.<clinit> adds isVfEnableUms() OR LeAudioService.isEnabled(); enabled property still permits profile 22. Other six-profile registrations retained. No vendor persistent properties changed by module."
+}

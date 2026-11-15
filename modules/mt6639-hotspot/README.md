@@ -55,3 +55,10 @@ sh bin/control.sh /data/adb/modules/mt6639-hotspot toggle
 sh bin/control.sh /data/adb/modules/mt6639-hotspot c02-24g
 sh bin/status_snapshot.sh /data/adb/modules/mt6639-hotspot init
 ```
+
+
+## 本 fork：直接控制入口的工作目录修复
+
+v0.2.23-dijun.1 在 `control.sh` 写日志、锁或会话前检查工作目录：父目录和目录必须为 root 所有，拒绝符号链接及普通文件，目录创建/权限修改失败立即退出。已有 root 目录的权限会校正并回读为 `0700`。此前只有 worker 有类似检查，直接操作入口并未覆盖。
+
+已离线执行真实控制脚本的初始化段，覆盖正常/缺失目录、旧宽松权限、符号链接、普通文件、错误所有者及 chmod 失败；没有运行热点、挂载或驱动操作。不据此增加新版 Android 框架、hostapd 或客户端兼容声明。

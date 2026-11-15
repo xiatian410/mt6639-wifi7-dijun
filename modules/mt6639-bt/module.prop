@@ -1,6 +1,6 @@
 id=mt6639-bt
 name=MT6639 LE Audio Host profiles
-version=v0.1.2
-versionCode=3
+version=v0.2.0-dijun.1
+versionCode=4
 author=mt6639-dijun
-description=Expose six LE Audio Host profiles validated on Dijun OS4.0.0.19. KernelSU only; per-boot property backup and restore. No automatic Bluetooth restart. Controller/audio roles require separate validation.
+description=Six LE Audio Host profiles for reviewed OS4 Bluetooth components. Per-boot backup/checked restore; no automatic Bluetooth restart. Pairing, audio and controller roles require separate validation.
