@@ -15,6 +15,12 @@ DEX_PROFILE = REPO / "outputs/softap-profile-build-20261026-1/classes.dex"
 DEX_TETHER = REPO / "outputs/native-tether-build-20261026-1/classes.dex"
 HOSTAPD_DIR = REPO / "outputs/hostapd-standalone-20261025-1/bin"
 DELETE_IFINDEX = REPO / "outputs/native-ifindex-delete-build-20261026-5/delete_ifindex"
+if os.environ.get("MT6639_HOTSPOT_INPUTS"):
+    _inputs = Path(os.environ["MT6639_HOTSPOT_INPUTS"])
+    DEX_PROFILE = _inputs / "softap-profile.dex"
+    DEX_TETHER = _inputs / "native-tether.dex"
+    HOSTAPD_DIR = _inputs
+    DELETE_IFINDEX = _inputs / "delete_ifindex"
 BOOT_ID = "11111111-2222-3333-4444-555555555555"
 
 
@@ -328,9 +334,9 @@ process_one() { echo process >> "$D/calls"; }
             with zipfile.ZipFile(out) as archive:
                 names = set(archive.namelist())
                 for required in {
-                    "module.prop", "config.conf", "customize.sh", "action.sh", "service.sh",
+                    "module.prop", "module.prop.template", "config.conf", "customize.sh", "action.sh", "service.sh",
                     "bin/control.sh", "bin/hostapd", "bin/hostapd_cli",
-                    "bin/status_snapshot.sh",
+                    "bin/status_snapshot.sh", "bin/status-card.sh", "bin/verify-module.sh",
                     "bin/request_worker.sh",
                     "bin/softap_once.sh", "bin/softap_profile.sh",
                     "bin/softap_24g_once.sh",
@@ -346,6 +352,9 @@ process_one() { echo process >> "$D/calls"; }
                 self.assertIn("bin/hostapd", sums)
                 self.assertIn("bin/control.sh", sums)
                 self.assertIn("bin/status_snapshot.sh", sums)
+                self.assertIn("module.prop.template", sums)
+                self.assertNotIn("  module.prop\n", sums)
+                self.assertEqual(archive.read("module.prop"), archive.read("module.prop.template"))
 
     @staticmethod
     def write_worker_stat_fixture(bindir):

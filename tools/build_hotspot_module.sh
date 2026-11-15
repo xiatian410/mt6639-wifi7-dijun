@@ -40,6 +40,7 @@ TMP=$(mktemp -d "$PARENT/.hotspot-module.XXXXXX")
 trap 'chmod -R u+w "$TMP" 2>/dev/null; rm -r "$TMP"' EXIT HUP INT TERM
 mkdir "$TMP/module"
 cp -R "$SOURCE"/. "$TMP/module/"
+cp "$SOURCE/module.prop" "$TMP/module/module.prop.template"
 mkdir -p "$TMP/module/bin"
 cp "$HOSTDIR/hostapd" "$HOSTDIR/hostapd_cli" "$TMP/module/bin/"
 cp "$DELETE_IFINDEX" "$TMP/module/bin/delete_ifindex"
@@ -51,6 +52,7 @@ cp "$PROFILE_DEX" "$TMP/module/bin/softap-profile.dex"
 chmod 0755 "$TMP/module/customize.sh" "$TMP/module/action.sh" "$TMP/module/service.sh" \
     "$TMP/module/uninstall.sh" "$TMP/module/bin/control.sh" "$TMP/module/bin/status_snapshot.sh" \
     "$TMP/module/bin/request_worker.sh" "$TMP/module/bin/android-env.sh" \
+    "$TMP/module/bin/status-card.sh" "$TMP/module/bin/verify-module.sh" \
     "$TMP/module/bin/softap_native_once.sh" "$TMP/module/bin/softap_native_config.sh" \
     "$TMP/module/bin/softap_once.sh" "$TMP/module/bin/softap_profile.sh" \
     "$TMP/module/bin/softap_24g_once.sh" \
@@ -70,7 +72,8 @@ fi
 
 (
     cd "$TMP/module"
-    find bin -type f -print | LC_ALL=C sort | xargs sha256sum > SHA256SUMS
+    { find bin -type f -print; printf '%s\n' module.prop.template action.sh service.sh uninstall.sh customize.sh; } |
+        LC_ALL=C sort | xargs sha256sum > SHA256SUMS
 )
 {
     echo "source_commit=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"

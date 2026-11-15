@@ -2,6 +2,8 @@
 
 ## 本 fork 当前维护
 
+2026-11-16：热点新增 **v0.2.24-dijun.1 动态状态卡**，显示状态、频段、配置带宽、配置文件就绪情况、恢复结果及最近操作。复用现有 worker 约每 30 秒检查，旧快照和错误单独显示，不增加后台服务。[热点候选下载](https://github.com/xiatian410/mt6639-wifi7-dijun/releases/tag/hotspot-v0.2.24-dijun.1) · [使用说明](modules/mt6639-hotspot/README.md#动态模块状态卡v0224-dijun1)。
+
 本批新增 **蓝牙 v0.2.0-dijun.1** 的 OS4 已核对组件适配、恢复重试与状态查询修复，以及 **热点 v0.2.23-dijun.1** 的直接入口目录验证。蓝牙不再因 OTA 显示版本变化而单独拒绝相同组件；未知 APK 仍拒绝启用。[本批范围、六模块状态与剩余边界](docs/研究-蓝牙组件与模块维护-20261115.md)。 [本批候选下载](https://github.com/xiatian410/mt6639-wifi7-dijun/releases/tag/v0.4.0-dijun.1)。
 
 本仓库由 `xiatian410` 维护，继承 [Hi-Jiajun 的上游研究](https://github.com/Hi-Jiajun/mt6639-wifi7-dijun)。上游历史实机结论保留各自版本与前提。
@@ -41,7 +43,7 @@
 | 目录 | 内容 |
 | --- | --- |
 | `tools/` | 只读巡检、DUP/OFDMA/打孔取证、F01–F10 矩阵运行器、发布审计；依赖 Python 3 标准库 |
-| `tests/` | 主机侧离线测试（465 项，按环境跳过缺失依赖的项目），含 C 夹具、Java LSPosed 夹具与 shell 契约测试 |
+| `tests/` | 主机侧离线测试（480 项，按环境跳过缺失依赖的项目），含 C 夹具、Java LSPosed 夹具与 shell 契约测试 |
 | `native/` | 原生夹具源码：恢复事务、netdev、mlo-gate、hostapd、TWT 桥 |
 | `modules/` | 6 个 KernelSU / LSPosed 模块源码与可复现构建脚本 |
 | `docs/` | 精选研究记录 41 篇：能力台账、门禁分析、逐项验证与部署/构建说明 |

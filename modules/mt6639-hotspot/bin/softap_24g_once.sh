@@ -14,7 +14,7 @@ STATE=$WORK/c02-24g
 [ -d "$WORK" ] && [ ! -L "$WORK" ] && [ "$(stat -c %a "$WORK")" = 700 ] || exit 66
 [ -d "$PRIVATE" ] && [ ! -L "$PRIVATE" ] && [ "$(stat -c %a "$PRIVATE")" = 700 ] || exit 66
 [ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ] || exit 73
-(cd "$MODDIR" && sha256sum -c SHA256SUMS >/dev/null 2>&1) || exit 69
+sh "$MODDIR/bin/verify-module.sh" "$MODDIR" || exit 69
 
 key=$PRIVATE/reconnect.key
 [ -f "$key" ] && [ ! -L "$key" ] && [ "$(stat -c %u "$key")" = 0 ] &&

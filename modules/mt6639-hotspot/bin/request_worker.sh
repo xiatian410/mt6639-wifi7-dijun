@@ -266,10 +266,19 @@ process_one() {
     return 1
 }
 run_loop() {
+    card_tick=0
     while :; do
-        [ -d "$MODDIR" ] && [ ! -L "$MODDIR" ] &&
-            [ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ] || exit 0
+        if [ ! -d "$MODDIR" ] || [ -L "$MODDIR" ] ||
+           [ -e "$MODDIR/disable" ] || [ -e "$MODDIR/remove" ]; then
+            timeout 3 sh "$MODDIR/bin/status-card.sh" "$MODDIR" update >/dev/null 2>&1 || true
+            exit 0
+        fi
         if process_one; then :; fi
+        # Reuse this worker, without another daemon or changing radio settings.
+        if [ "$card_tick" -eq 0 ]; then
+            sh "$MODDIR/bin/status-card.sh" "$MODDIR" poll >/dev/null 2>&1 || true
+        fi
+        card_tick=$(((card_tick+1)%30))
         sleep 1
     done
 }

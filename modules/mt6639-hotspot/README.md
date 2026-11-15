@@ -62,3 +62,30 @@ sh bin/status_snapshot.sh /data/adb/modules/mt6639-hotspot init
 v0.2.23-dijun.1 在 `control.sh` 写日志、锁或会话前检查工作目录：父目录和目录必须为 root 所有，拒绝符号链接及普通文件，目录创建/权限修改失败立即退出。已有 root 目录的权限会校正并回读为 `0700`。此前只有 worker 有类似检查，直接操作入口并未覆盖。
 
 已离线执行真实控制脚本的初始化段，覆盖正常/缺失目录、旧宽松权限、符号链接、普通文件、错误所有者及 chmod 失败；没有运行热点、挂载或驱动操作。不据此增加新版 Android 框架、hostapd 或客户端兼容声明。
+
+## 动态模块状态卡（v0.2.24-dijun.1）
+
+KernelSU 模块列表的描述现在显示当前数据，例如：
+
+```text
+[热点运行] 频段：6GHz | 配置带宽：20MHz | 热点密钥：已配置 | 恢复配置：6G有/2G缺失 | SELinux：Enforcing | 恢复：未记录 | 最近操作：启动成功 | 更新：12:34:56。状态检查不代表客户端联网。
+```
+
+这是格式示例，不是本次实机结果。带宽是热点配置值，不是客户端协商速率。密钥栏仅显示文件是否满足既有权限条件，不读取或展示密码；不展示 SSID、MAC、配对信息、启动标识或私有目录。
+
+- 启动时和每次状态快照发布后更新；启动/停止/恢复等操作结束时记录其真实返回码并刷新。
+- 默认 Settings 请求 worker 约每 30 秒执行一次既有只读状态检查；没有新增常驻进程。检查通过后才沿用控制器的运行态判定，不启动热点、不切网、不执行恢复。
+- 操作正在进行时跳过周期检查，以免与启动/停止争抢；状态快照仍可展示启动中/停止中。禁用或待移除时，worker 退出前更新相应描述。
+- 旧 boot、超过 90 秒的快照、损坏或查询失败都会明确显示。禁用 `ENABLE_SETTINGS_BRIDGE` 后没有周期刷新，启动/手动操作仍更新；可显式调用下面的只读检查。
+- KernelSU 管理器可能缓存模块描述，返回列表或重新打开管理器后显示最新内容。不是管理器内的实时动画组件。
+
+```sh
+# 显示现有快照，不发布 module.prop
+sh /data/adb/modules/mt6639-hotspot/bin/status-card.sh /data/adb/modules/mt6639-hotspot show
+# 执行一次既有只读状态检查并刷新描述
+sh /data/adb/modules/mt6639-hotspot/bin/status-card.sh /data/adb/modules/mt6639-hotspot poll
+```
+
+以上命令在设备 root / KernelSU 环境运行。本仓库维护过程仅做离线测试。
+
+构建时保存 `module.prop.template` 并纳入静态校验。运行时只替换 `description`，版本、ID 和脚本等仍校验，`SHA256SUMS` 不随展示更新。`config.conf` 保留既有可配置方式。显示失败不会改写热点操作返回码，也不会触发无线动作。

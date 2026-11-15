@@ -79,4 +79,6 @@ if command -v restorecon >/dev/null 2>&1; then
 fi
 mv "$STATUS_TMP" "$STATUS_FILE" || exit 74
 trap - EXIT HUP INT TERM
+# Presentation failure must not change snapshot publication or action results.
+timeout 3 sh "$MODDIR/bin/status-card.sh" "$MODDIR" update >/dev/null 2>&1 || true
 echo "snapshot=$STATUS_FILE state=$state band=$band width=$width boot=$boot ap_key=$ap_key reconnect_6g=$reconnect_6g reconnect_2g=$reconnect_2g enforcing=$enforcing fiveg_upstream=$fiveg_upstream"

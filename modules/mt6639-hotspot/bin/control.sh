@@ -48,7 +48,7 @@ publish_status() {
     sh "$MODDIR/bin/status_snapshot.sh" "$MODDIR" publish "$@" >/dev/null
 }
 boot_id() { cat /proc/sys/kernel/random/boot_id 2>/dev/null; }
-sha_ok() { (cd "$MODDIR" && sha256sum -c SHA256SUMS >/dev/null 2>&1); }
+sha_ok() { sh "$MODDIR/bin/verify-module.sh" "$MODDIR"; }
 session_task() {
     [ ! -L "$TASK_FILE" ] && [ -f "$TASK_FILE" ] && [ -s "$TASK_FILE" ] || return 1
     task=$(cat "$TASK_FILE") || return 1
@@ -537,5 +537,10 @@ case "$OP" in
         [ "$rc" = 0 ] || publish_status unresolved "${ARG_BAND:-none}" "${ARG_WIDTH:-none}" || true
         ;;
     *) echo 'usage: control.sh MODDIR status|start|stop|recover|toggle [5g|6g WIDTH]|c02-24g' >&2; exit 64 ;;
+esac
+case "$OP" in
+    start|stop|recover|toggle|c02-24g)
+        timeout 3 sh "$MODDIR/bin/status-card.sh" "$MODDIR" update "$OP" "$rc" >/dev/null 2>&1 || true
+        ;;
 esac
 exit "$rc"
