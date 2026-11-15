@@ -354,7 +354,41 @@ process_one() { echo process >> "$D/calls"; }
                 self.assertIn("bin/status_snapshot.sh", sums)
                 self.assertIn("module.prop.template", sums)
                 self.assertNotIn("  module.prop\n", sums)
+                self.assertNotIn("  customize.sh\n", sums)
                 self.assertEqual(archive.read("module.prop"), archive.read("module.prop.template"))
+
+                # KernelSU installer.sh (200818cabf8f) sources customize.sh,
+                # then deletes it and README.md. Test the installed layout,
+                # not just an untouched ZIP; no Android/radio code is run.
+                installed = Path(td) / "installed"
+                archive.extractall(installed)
+            env = dict(os.environ, MODPATH=str(installed))
+            hook = subprocess.run(["sh", str(installed / "customize.sh")],
+                                  env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(hook.returncode, 0, hook.stderr)
+            for name in ("customize.sh", "README.md"):
+                (installed / name).unlink(missing_ok=True)
+
+            def verify():
+                return subprocess.run(["sh", str(installed / "bin/verify-module.sh"),
+                                       str(installed)], capture_output=True, text=True, timeout=10)
+
+            self.assertEqual(verify().returncode, 0)
+            prop = installed / "module.prop"
+            prop.write_text('\n'.join('description=[fixture] refreshed' if line.startswith('description=')
+                                      else line for line in prop.read_text().splitlines()) + '\n')
+            self.assertEqual(verify().returncode, 0)
+            original = prop.read_bytes()
+            prop.write_text(prop.read_text().replace('versionCode=33', 'versionCode=99'))
+            self.assertNotEqual(verify().returncode, 0)
+            prop.write_bytes(original)
+            asset = installed / "bin/control.sh"
+            original = asset.read_bytes()
+            asset.write_bytes(original + b'\n# changed\n')
+            self.assertNotEqual(verify().returncode, 0)
+            asset.write_bytes(original)
+            asset.unlink()
+            self.assertNotEqual(verify().returncode, 0)
 
     @staticmethod
     def write_worker_stat_fixture(bindir):

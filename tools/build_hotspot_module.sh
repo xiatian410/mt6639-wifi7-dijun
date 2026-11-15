@@ -72,7 +72,9 @@ fi
 
 (
     cd "$TMP/module"
-    { find bin -type f -print; printf '%s\n' module.prop.template action.sh service.sh uninstall.sh customize.sh; } |
+    # KernelSU removes customize.sh after sourcing it during installation.
+    # Runtime integrity covers files retained by the installer only.
+    { find bin -type f -print; printf '%s\n' module.prop.template action.sh service.sh uninstall.sh; } |
         LC_ALL=C sort | xargs sha256sum > SHA256SUMS
 )
 {
