@@ -54,6 +54,7 @@ cp "$NATIVE_DEX" "$TMP/module/bin/native-tether.dex"
 cp "$PROFILE_DEX" "$TMP/module/bin/softap-profile.dex"
 chmod 0755 "$TMP/module/customize.sh" "$TMP/module/action.sh" "$TMP/module/service.sh" \
     "$TMP/module/uninstall.sh" "$TMP/module/bin/control.sh" "$TMP/module/bin/status_snapshot.sh" \
+    "$TMP/module/bin/radio-control.sh" "$TMP/module/bin/radio-key.sh" \
     "$TMP/module/bin/request_worker.sh" "$TMP/module/bin/android-env.sh" \
     "$TMP/module/bin/status-card.sh" "$TMP/module/bin/verify-module.sh" \
     "$TMP/module/bin/hotspot-identity.sh" "$TMP/module/bin/hotspot-upstream.sh" \

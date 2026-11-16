@@ -1,6 +1,41 @@
 # MT6639 Native EHT Hotspot
 
-当前维护候选为 **v0.2.26-dijun.1 / code34**。原生热点不再按旧 OTA fingerprint 拒绝已核对内核/驱动；蜂窝和普通 Wi-Fi 上游不再强制提供实验网络恢复口令。修复 v0.2.24 安装后完整性检查拒绝：KernelSU 在安装结束时删除 `customize.sh`，它不应出现在运行时的 `SHA256SUMS` 中。其余静态脚本、原生程序、DEX 和元数据模板仍校验；动态描述更新方式不变。请安装新构建包，不要在设备上重生成校验清单或绕过校验。本次未验证实机热点启动或客户端联网。
+当前源码版本为 **v0.3.0-dijun.1 / code35**：新增 6GHz 与热点的合并控制入口，「操作」按钮改为一键开启/关闭两层（见下节）；热点自身的启动、停止与恢复逻辑没有改动。以下为 v0.2.26-dijun.1 / code34 的说明，仍然适用。原生热点不再按旧 OTA fingerprint 拒绝已核对内核/驱动；蜂窝和普通 Wi-Fi 上游不再强制提供实验网络恢复口令。修复 v0.2.24 安装后完整性检查拒绝：KernelSU 在安装结束时删除 `customize.sh`，它不应出现在运行时的 `SHA256SUMS` 中。其余静态脚本、原生程序、DEX 和元数据模板仍校验；动态描述更新方式不变。请安装新构建包，不要在设备上重生成校验清单或绕过校验。本次未验证实机热点启动或客户端联网。
+
+## 合并控制：6GHz + 热点（v0.3.0-dijun.1）
+
+`bin/radio-control.sh` 把「启用 6GHz」和「启动 6GHz 热点」合成一个入口，模块的「操作」按钮与 WebUI 控制台都走它。它自己不改无线状态：每一步仍然调用 `mt6639-6g` 与本模块各自的 `control.sh`，两边原有的锁、校验、恢复逻辑照旧是最终裁决；它只负责排序、在已知必然失败时提前拒绝，以及把自己启用的 6GHz 还回去。
+
+两个模块仍是各自独立的模块 ID。6GHz 的原生事务程序把 `/data/adb/modules/mt6639-6g` 和 `/data/adb/mt6639-6g` 写在已固定哈希的二进制里，不重新编译并实机验证就不能并成一个 ID。本批只改热点模块；`mt6639-6g` v0.3.3-dijun.1 不需要更新。
+
+```sh
+C="sh /data/adb/modules/mt6639-hotspot/bin/radio-control.sh /data/adb/modules/mt6639-hotspot"
+$C status            # 轻量状态：6GHz 事务、热点快照、Wi-Fi/上游、密钥是否就绪
+$C status full       # 另外执行受控的热点状态检查、完整性与身份核对、刷新 6GHz 状态卡
+$C start [20|40|80|160|320]   # 一键开启；省略带宽时用 set-width 保存的值
+$C stop              # 一键关闭
+$C toggle            # 「操作」按钮：空闲时开启，否则关闭/恢复
+$C six-on | six-off | six-refresh    # 单独的 6GHz 开关与重新注册
+$C set-width 160     # 保存默认带宽
+$C logs              # 合并控制、热点、6GHz 三份日志的末尾
+echo "$HEX" | sh /data/adb/modules/mt6639-hotspot/bin/radio-key.sh /data/adb/modules/mt6639-hotspot set
+```
+
+**一键开启的顺序。** ①只读预检；② 6GHz 事务未运行时调用 `mt6639-6g` 的 `enable`；③启用会重启 Wi-Fi，等待 STA 状态连续三次采样一致后重做上游预检；④ `control.sh start 6g 带宽`；⑤用受控状态检查和公开快照确认 `active / 6g / 带宽`，不一致就停止热点。任何一步失败，如果 6GHz 是本次启用的，就调用 `disable` 还回去；原本就在运行的 6GHz 不动。
+
+**提前拒绝（不产生任何无线变更）。** 模块缺失/禁用/待移除、非 Enforcing、`ap.key` 缺失或权限不对、完整性校验失败、设备/SDK/内核/驱动不在已核对组合内、系统共享正在使用、`mtap0` 已存在、热点不是空闲、6GHz 事务需要先恢复、Wi-Fi 关闭、STA 连接在 2.4/5GHz（本驱动会把 6GHz AP 挪到 STA 信道，runner 本来也拒绝）、蜂窝模式下 10 秒内没有蜂窝 IPv4 地址。这些都是热点或 6GHz 控制器自己的门槛，放到前面只是避免「先重启一次 Wi-Fi 启用 6GHz、再失败、再重启一次还回去」。
+
+**归还规则。** 只有本控制器启用的那个 6GHz 事务才会在「一键关闭」时恢复。记录在 `/data/adb/mt6639-radio/session`（root、0600），包含 boot ID 与事务路径；只有 boot 相同且当前事务路径与记录一致才执行恢复。上一次启动留下的记录直接丢弃，格式不对的记录改名为 `session.invalid.*` 保留，两者都不会被用来关闭 6GHz。用户自己用 6GHz 开关启用的事务不记为归属，关闭热点后保持开启。恢复失败时记录保留，再次「关闭」可以接着完成。
+
+**单独的 6GHz 开关。** `six-off` 与 `six-refresh` 会重启 Wi-Fi，所以要求热点空闲，否则返回 `hotspot_active`。
+
+**锁。** `/data/adb/mt6639-radio/control.lock` 只串行化本控制器的操作；所有子进程都以 `8>&-` 启动。6GHz 看护进程与热点 runner 比脚本活得久且不会关闭继承的描述符，继承到锁就会一直占着。受控的热点状态检查沿用 `status-card.sh poll` 的协议：先拿 `action.lock`，热点操作进行中就跳过，只读快照。
+
+**输出。** 操作过程逐行输出 `phase=<步骤>`，结束时输出一行 `result=ok` 或 `result=failed step=… reason=… detail=… rc=…`；`reason` 取自底层控制器最后一条 `REJECT`。退出码沿用现有约定：64 用法、66 缺输入、69 不可用、73 状态冲突、74 I/O、75 忙、77 权限。`status` 的 `six_card=` 是 6GHz 模块自己渲染的状态卡文本；状态输出只包含上游模式与 STA 频率，不含 SSID、BSSID 或口令。
+
+**热点密码。** `radio-key.sh set` 从标准输入读一行小写十六进制（口令各字节），解码后按 `softap_native_config.sh` 的同一条件校验（单行、8–63 个可打印 ASCII），以 0600 原子写入 `private/ap.key`。口令不出现在任何命令行参数、日志或输出里；`status` 只回答有没有可用的密钥文件。
+
+**验证范围。** `tests/test_radio_control.py`、`tests/test_radio_key.py` 用两个模块控制器的替身覆盖排序、提前拒绝、回滚、归属和锁，并直接运行真实的热点 `control.sh status`、`status_snapshot.sh` 与 6GHz `control.sh status` 核对字段；在 dash、mksh R59、busybox ash 以及 gawk、mawk、busybox awk 下通过。没有在手机上运行，未验证真实的 6GHz 启用、热点启动或客户端联网。
 
 这是显式操作型实验模块，默认关闭。KernelSU 的“操作”按钮在空闲时启动独立 6GHz EHT 热点，在已有会话时执行 checked stop。源码候选已通过独立的 Settings 请求桥接线，提供受 readiness 门禁保护的频段/带宽选择、启动与停止；不接管原厂热点总开关。下文 v0.2.9/code17、UI v0.2.6/code12 及部署状态为历史记录，不代表当前候选。历史固定哈希及安装前提见[交付手册](../../docs/交付-MT6639候选安装与回滚-20261026.md)。已冻结的历史ZIP字节保持不变，本文的后续说明不代表包内历史README已更新。
 

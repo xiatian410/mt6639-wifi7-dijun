@@ -336,7 +336,8 @@ process_one() { echo process >> "$D/calls"; }
                 names = set(archive.namelist())
                 for required in {
                     "module.prop", "module.prop.template", "config.conf", "customize.sh", "action.sh", "service.sh",
-                    "bin/control.sh", "bin/hostapd", "bin/hostapd_cli",
+                    "bin/control.sh", "bin/radio-control.sh", "bin/radio-key.sh",
+                    "bin/hostapd", "bin/hostapd_cli",
                     "bin/status_snapshot.sh", "bin/status-card.sh", "bin/verify-module.sh",
                     "bin/hotspot-identity.sh", "bin/hotspot-upstream.sh", "bin/compat.sh", "bin/compatibility.conf",
                     "bin/request_worker.sh",
@@ -383,7 +384,7 @@ process_one() { echo process >> "$D/calls"; }
                                       else line for line in prop.read_text().splitlines()) + '\n')
             self.assertEqual(verify().returncode, 0)
             original = prop.read_bytes()
-            prop.write_text(prop.read_text().replace('versionCode=34', 'versionCode=99'))
+            prop.write_text(prop.read_text().replace('versionCode=35', 'versionCode=99'))
             self.assertNotEqual(verify().returncode, 0)
             prop.write_bytes(original)
             asset = installed / "bin/control.sh"

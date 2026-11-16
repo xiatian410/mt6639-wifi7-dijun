@@ -1,3 +1,4 @@
 #!/system/bin/sh
 MODDIR=${0%/*}
-exec sh "$MODDIR/bin/control.sh" "$MODDIR" toggle
+# One press for both layers: 6GHz registration and the 6GHz hotspot.
+exec sh "$MODDIR/bin/radio-control.sh" "$MODDIR" toggle
