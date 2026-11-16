@@ -1,8 +1,8 @@
 #!/bin/sh
 # Build a new module ZIP from pinned candidate artifacts. No installation/restart.
 set -eu
-[ "$#" = 5 ] || {
-    echo 'usage: build_hotspot_module.sh HOSTAPD_BIN_DIR NATIVE_TETHER_DEX SOFTAP_PROFILE_DEX DELETE_IFINDEX_BIN OUTPUT_ZIP' >&2
+[ "$#" = 5 ] || [ "$#" = 6 ] || {
+    echo 'usage: build_hotspot_module.sh HOSTAPD_BIN_DIR NATIVE_TETHER_DEX SOFTAP_PROFILE_DEX DELETE_IFINDEX_BIN OUTPUT_ZIP [WEBROOT_DIR]' >&2
     exit 64
 }
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -11,11 +11,25 @@ NATIVE_DEX=$2
 PROFILE_DEX=$3
 DELETE_IFINDEX=$4
 OUT=$5
+# Optional console built by tools/build_webui.sh. Without it the module is
+# complete but has no WebUI; the build never fetches or compiles anything.
+WEBROOT=${6:-}
 SOURCE=$ROOT/modules/mt6639-hotspot
 
 [ -f "$HOSTDIR/hostapd" ] && [ -f "$HOSTDIR/hostapd_cli" ] || exit 66
 [ -f "$NATIVE_DEX" ] && [ -f "$PROFILE_DEX" ] && [ -f "$DELETE_IFINDEX" ] || exit 66
 [ ! -e "$OUT" ] || { echo 'REJECT output_exists' >&2; exit 73; }
+if [ -n "$WEBROOT" ]; then
+    WEBROOT=$(CDPATH= cd -- "$WEBROOT" && pwd) || exit 66
+    for f in index.html console.js bridge.js WEBUI-PROVENANCE.txt; do
+        [ -f "$WEBROOT/$f" ] && [ ! -L "$WEBROOT/$f" ] || {
+            echo "REJECT webroot_incomplete missing=$f" >&2; exit 66; }
+    done
+    ls "$WEBROOT"/*.wasm >/dev/null 2>&1 || { echo 'REJECT webroot_incomplete missing=wasm' >&2; exit 66; }
+    if find "$WEBROOT" -type l | grep -q .; then
+        echo 'REJECT symlink_in_webroot' >&2; exit 69
+    fi
+fi
 file_sha() { sha256sum "$1" | awk '{print $1}'; }
 expect() {
     actual=$(file_sha "$2")
@@ -52,6 +66,12 @@ cp "$ROOT/tools/softap_native_once.sh" "$ROOT/tools/softap_native_config.sh" \
 cp "$ROOT/tools/softap_once.sh" "$ROOT/tools/softap_profile.sh" "$TMP/module/bin/"
 cp "$NATIVE_DEX" "$TMP/module/bin/native-tether.dex"
 cp "$PROFILE_DEX" "$TMP/module/bin/softap-profile.dex"
+if [ -n "$WEBROOT" ]; then
+    mkdir "$TMP/module/webroot"
+    cp -R "$WEBROOT"/. "$TMP/module/webroot/"
+    find "$TMP/module/webroot" -type d -exec chmod 0755 {} +
+    find "$TMP/module/webroot" -type f -exec chmod 0644 {} +
+fi
 chmod 0755 "$TMP/module/customize.sh" "$TMP/module/action.sh" "$TMP/module/service.sh" \
     "$TMP/module/uninstall.sh" "$TMP/module/bin/control.sh" "$TMP/module/bin/status_snapshot.sh" \
     "$TMP/module/bin/radio-control.sh" "$TMP/module/bin/radio-key.sh" \
@@ -79,8 +99,12 @@ fi
     cd "$TMP/module"
     # KernelSU removes customize.sh after sourcing it during installation.
     # Runtime integrity covers files retained by the installer only.
-    { find bin -type f -print; printf '%s\n' module.prop.template action.sh service.sh uninstall.sh; } |
-        LC_ALL=C sort | xargs sha256sum > SHA256SUMS
+    {
+        find bin -type f -print
+        # The console issues root commands, so it is covered like the scripts.
+        [ ! -d webroot ] || find webroot -type f -print
+        printf '%s\n' module.prop.template action.sh service.sh uninstall.sh
+    } | LC_ALL=C sort | xargs sha256sum > SHA256SUMS
 )
 {
     echo "source_commit=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
@@ -90,6 +114,12 @@ fi
     echo "delete_ifindex=$(file_sha "$DELETE_IFINDEX")"
     echo "softap_profile_dex=$(file_sha "$PROFILE_DEX")"
     echo "default_autostart=0"
+    if [ -n "$WEBROOT" ]; then
+        echo "webui=$(cd "$WEBROOT" && find . -type f -print | LC_ALL=C sort | xargs sha256sum | sha256sum | awk '{print $1}')"
+        sed 's/^/webui_/' "$WEBROOT/WEBUI-PROVENANCE.txt"
+    else
+        echo "webui=absent"
+    fi
 } > "$TMP/module/ASSET-PROVENANCE.txt"
 
 # File mtimes are part of the ZIP records. Pin them and feed a C-sorted explicit

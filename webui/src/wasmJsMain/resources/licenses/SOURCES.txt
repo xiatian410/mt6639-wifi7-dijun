@@ -1,0 +1,127 @@
+Third-party license provenance
+==============================
+
+Texts are unmodified upstream files (Gitiles ?format=TEXT responses decoded
+from base64). SHA-256 values cover the distributed text bytes. File names
+may differ from upstream. This inventory is not a complete dependency audit.
+
+Version evidence: WebUI version catalog and cached Maven POM/klib artifacts:
+Miuix 0.9.4; Compose Multiplatform UI/Foundation 1.12.2; Kotlin stdlib
+2.4.21; kotlinx-coroutines-core 1.11.0; Skiko runtime 0.150.2.
+Miuix local source was tagged v0.9.4; its LICENSE matches the fetched file.
+
+Skiko native runtime version evidence:
+https://github.com/JetBrains/skiko/blob/v0.150.2/skiko/gradle.properties
+declares dependencies.skia=m150-a3f509bf52. Native dependency revisions below
+come from https://github.com/JetBrains/skia/blob/m150-a3f509bf52/DEPS .
+The matching Skia-m150-a3f509bf52-wasm-Release-wasm.zip release archive
+contains static archives for Brotli, Expat, FreeType, HarfBuzz, ICU, JPEG,
+PNG, WebP, Wuffs and zlib. Their notices are included conservatively;
+archive presence alone does not prove which objects survive final linking.
+
+Kotlin bundled-code attribution mapping:
+https://github.com/JetBrains/kotlin/blob/v2.4.21/license/README.md
+lists common/native-wasm collections (GWT), kotlin/time (ThreeTen), and
+Wasm Number2String (AssemblyScript). Compiler-only components are not
+represented as shipped browser dependencies.
+
+miuix-LICENSE.txt
+Source: https://raw.githubusercontent.com/compose-miuix-ui/miuix/v0.9.4/LICENSE
+SHA-256: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+
+kotlin-LICENSE.txt
+Source: https://raw.githubusercontent.com/JetBrains/kotlin/v2.4.21/license/LICENSE.txt
+SHA-256: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+
+kotlin-COPYRIGHT.txt
+Source: https://raw.githubusercontent.com/JetBrains/kotlin/v2.4.21/license/COPYRIGHT.txt
+SHA-256: 8f1a1700adb5490604c6094fb137bf73f6c28d3ee554b58f3ff8ef975a79672d
+
+kotlin-threetenbp_license.txt
+Source: https://raw.githubusercontent.com/JetBrains/kotlin/v2.4.21/license/third_party/threetenbp_license.txt
+SHA-256: d1bc53b493a3ab387b42717ed5c4b1976a5048996f81154278100bff86d39331
+
+kotlin-gwt_license.txt
+Source: https://raw.githubusercontent.com/JetBrains/kotlin/v2.4.21/license/third_party/gwt_license.txt
+SHA-256: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+
+kotlin-assemblyscript_license.txt
+Source: https://raw.githubusercontent.com/JetBrains/kotlin/v2.4.21/license/third_party/assemblyscript_license.txt
+SHA-256: c5accbbd8546e94c34aed24afe689a617627d18eed5a6c48277e48db57c23851
+
+coroutines-LICENSE.txt
+Source: https://raw.githubusercontent.com/Kotlin/kotlinx.coroutines/1.11.0/LICENSE.txt
+SHA-256: b1febe6399dffb10d19d35e7663ab16300c93cb0476a94115df1cc0097a8ffd8
+
+coroutines-NOTICE.txt
+Source: https://raw.githubusercontent.com/Kotlin/kotlinx.coroutines/1.11.0/license/NOTICE.txt
+SHA-256: 1ab6de67ef738bffae63f9aa6a8798a35e87341c83ea28d09c8dc8ca6993232a
+
+skiko-LICENSE.txt
+Source: https://raw.githubusercontent.com/JetBrains/skiko/v0.150.2/LICENSE
+SHA-256: c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
+
+skiko-NOTICE.txt
+Source: https://raw.githubusercontent.com/JetBrains/skiko/v0.150.2/NOTICE
+SHA-256: 35dd077c24768b53625101cfcc0ad853ae7e2abc08bd2a111a0267760d1406d8
+
+skia-LICENSE.txt
+Source: https://raw.githubusercontent.com/JetBrains/skia/m150-a3f509bf52/LICENSE
+SHA-256: 5f787c1dee3c56547f09ccc2906ab5f5293c4d8dd6c8654e573216c38e908dbd
+
+skia-brotli-LICENSE
+Source: https://skia.googlesource.com/external/github.com/google/brotli.git/+/6d03dfbedda1615c4cba1211f8d81735575209c8/LICENSE?format=TEXT
+SHA-256: 3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94
+
+skia-expat-COPYING
+Source: https://chromium.googlesource.com/external/github.com/libexpat/libexpat.git/+/6154446fccefbf3ca644894f598969113b0c7bcd/expat/COPYING?format=TEXT
+SHA-256: 31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87
+
+skia-freetype-FTL.TXT
+Source: https://chromium.googlesource.com/chromium/src/third_party/freetype2.git/+/264b5fbf5b912b39f98d038bf75d39be0a73f21b/docs/FTL.TXT?format=TEXT
+SHA-256: 5a5ee54c5001bbad1cdc1a57cc3dd4c42199b2da09d39c7ee41fab002d02967f
+
+skia-harfbuzz-COPYING
+Source: https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git/+/9cb1fee51069b206effb4736e443b038d230789d/COPYING?format=TEXT
+SHA-256: ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64
+
+skia-icu-LICENSE
+Source: https://chromium.googlesource.com/chromium/deps/icu.git/+/364118a1d9da24bb5b770ac3d762ac144d6da5a4/LICENSE?format=TEXT
+SHA-256: 17510cf7a58b4879b887ec05a45d72cf1b73544dd9ec7e72f20110ed104229ee
+
+skia-libjpeg-turbo-LICENSE.txt
+Source: https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git/+/e14cbfaa85529d47f9f55b0f104a579c1061f9ad/LICENSE.md?format=TEXT
+SHA-256: 96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430
+
+skia-libjpeg-turbo-README.ijg
+Source: https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git/+/e14cbfaa85529d47f9f55b0f104a579c1061f9ad/README.ijg?format=TEXT
+SHA-256: 75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6
+
+skia-libpng-LICENSE
+Source: https://skia.googlesource.com/third_party/libpng.git/+/d5515b5b8be3901aac04e5bd8bd5c89f287bcd33/LICENSE?format=TEXT
+SHA-256: bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526
+
+skia-libwebp-COPYING
+Source: https://chromium.googlesource.com/webm/libwebp.git/+/845d5476a866141ba35ac133f856fa62f0b7445f/COPYING?format=TEXT
+SHA-256: 5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf
+
+skia-libwebp-PATENTS
+Source: https://chromium.googlesource.com/webm/libwebp.git/+/845d5476a866141ba35ac133f856fa62f0b7445f/PATENTS?format=TEXT
+SHA-256: cc3273e0694ea5896145e0677699b53471b03ea43021ddc50e7923fbb9f5023c
+
+skia-wuffs-LICENSE
+Source: https://skia.googlesource.com/external/github.com/google/wuffs-mirror-release-c.git/+/e3f919ccfe3ef542cfc983a82146070258fb57f8/LICENSE?format=TEXT
+SHA-256: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30
+
+skia-zlib-LICENSE
+Source: https://chromium.googlesource.com/chromium/src/third_party/zlib/+/646b7f569718921d7d4b5b8e22572ff6c76f2596/LICENSE?format=TEXT
+SHA-256: e1cfcc55c325b3f78cf55df9664abaa066e2271dffe8213347d9fccdfbac8f2c
+
+compose-LICENSE.txt
+Source: https://repo.maven.apache.org/maven2/org/jetbrains/compose/ui/ui-wasm-js/1.12.2/ui-wasm-js-1.12.2.klib
+Archive entry: META-INF/org/jetbrains/compose/ui/ui/LICENSE.txt
+SHA-256: 809fa1ed21450f59827d1e9aec720bbc4b687434fa22283c6cb5dd82a47ab9c0
+
+skia-freetype-LICENSE.TXT
+Source: https://chromium.googlesource.com/chromium/src/third_party/freetype2.git/+/264b5fbf5b912b39f98d038bf75d39be0a73f21b/LICENSE.TXT?format=TEXT
+SHA-256: bd36c8b474855fa294c2ec5c184544478ef3720aad37d65a6296a4f264fd2d3b

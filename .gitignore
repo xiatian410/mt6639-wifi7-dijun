@@ -9,6 +9,9 @@ outputs/
 *.jar
 *.keystore
 build/
+webui/.gradle/
+webui/.kotlin/
+webui/kotlin-js-store/
 __pycache__/
 *.py[cod]
 .DS_Store

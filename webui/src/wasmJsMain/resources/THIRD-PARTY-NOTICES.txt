@@ -1,0 +1,67 @@
+WebUI third-party notices
+=========================
+
+This distribution uses the following third-party software. The license texts
+and upstream notices referenced below are provided in the licenses/ directory;
+licenses/SOURCES.txt records exact upstream URLs and text checksums. These
+notices do not replace the project's own license or grant trademark rights.
+
+Miuix 0.9.4 (UI, preference, icons and supporting modules)
+  compose-miuix-ui contributors; source files carry 2025/2026 copyright notices.
+  https://github.com/compose-miuix-ui/miuix/tree/v0.9.4
+  Apache License 2.0: licenses/miuix-LICENSE.txt.
+
+Compose Multiplatform 1.12.2 (UI/Foundation and related Compose components)
+  JetBrains and The Android Open Source Project contributors.
+  https://github.com/JetBrains/compose-multiplatform/tree/v1.12.2
+  Apache License 2.0: licenses/compose-LICENSE.txt, extracted from the actual
+  ui-wasm-js 1.12.2 klib. Embedded license texts in the inspected Compose and
+  AndroidX Wasm klibs are identical. Compose's version does not imply that
+  every AndroidX/transitive dependency has that same version.
+
+Kotlin standard library 2.4.21
+  Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language
+  contributors. https://github.com/JetBrains/kotlin/tree/v2.4.21
+  Apache License 2.0: licenses/kotlin-LICENSE.txt and kotlin-COPYRIGHT.txt.
+  Bundled common/native-wasm collection code derives from GWT (2007-08 Google
+  Inc.); Wasm Number2String derives from the AssemblyScript standard library.
+  See licenses/kotlin-gwt_license.txt and kotlin-assemblyscript_license.txt.
+  Common kotlin/time code derives from ThreeTen; see the full copyright and
+  BSD terms in licenses/kotlin-threetenbp_license.txt.
+
+kotlinx.coroutines 1.11.0
+  Copyright 2016-2025 JetBrains s.r.o and contributors.
+  https://github.com/Kotlin/kotlinx.coroutines/tree/1.11.0
+  Apache License 2.0: licenses/coroutines-LICENSE.txt.
+  Upstream attribution: licenses/coroutines-NOTICE.txt.
+
+Skiko 0.150.2 and its Skia native WebAssembly runtime
+  https://github.com/JetBrains/skiko/tree/v0.150.2
+  Apache License 2.0: licenses/skiko-LICENSE.txt.
+  Android Open Source Project attribution: licenses/skiko-NOTICE.txt.
+  This Skiko release pins Skia m150-a3f509bf52:
+  https://github.com/JetBrains/skia/tree/m150-a3f509bf52
+  Copyright (c) 2011 Google Inc. All rights reserved.
+  BSD terms: licenses/skia-LICENSE.txt.
+
+Skia native dependencies
+  Version-pinned license texts are included for Brotli, Expat, FreeType,
+  HarfBuzz, ICU (including its third-party notices), libjpeg-turbo/IJG,
+  libpng, libwebp (including its patent grant), Wuffs and zlib. See the
+  licenses/skia-* files and licenses/SOURCES.txt for the exact revisions.
+  FreeType is provided under the FreeType License (FTL) option; see
+  licenses/skia-freetype-LICENSE.TXT and skia-freetype-FTL.TXT.
+  This software is based in part on the work of the FreeType Team.
+  https://freetype.org
+  This software is based in part on the work of the Independent JPEG Group.
+
+Scope and remaining verification
+  This is a version-scoped collection, not a certification of complete
+  license compliance. The Skia release archive and pinned DEPS were checked,
+  but the final linked native objects, additional embedded source-level
+  notices (including skcms/JSON code and FreeType subcomponents), and the
+  Emscripten/LLVM/libc toolchain runtime licenses were not fully inventoried.
+  Other Kotlin/Compose/Miuix transitive dependencies still require a complete
+  resolved-runtime attribution review before claiming exhaustive coverage.
+  Font licensing is handled separately by the font resources; no fonts or
+  font notices were changed in this collection.

@@ -137,13 +137,15 @@ start)
         /bin/sleep 30 </dev/null >/dev/null 2>&1 &
         echo "$!" >> "$F/pids"
     else
+        [ ! -e "$F/hot.failed_start_state" ] || cp "$F/hot.failed_start_state" "$F/hot.state"
         cat "$F/hot.start_out" 2>/dev/null
     fi
+    [ ! -e "$F/hot.status_rc_after_start" ] || cp "$F/hot.status_rc_after_start" "$F/hot.status_rc"
     exit "$rc" ;;
 stop)
     rc=$(value hot.stop_rc 0)
     if [ "$rc" = 0 ]; then
-        echo idle > "$F/hot.state"
+        echo "$(value hot.stop_state idle)" > "$F/hot.state"
         echo 'state=idle restored=1 action_rc=0'
     else
         cat "$F/hot.stop_out" 2>/dev/null
@@ -408,6 +410,65 @@ class RadioControlTests(RadioFixture):
         self.assertEqual(self.result(r)['detail'], 'band=6g,width=40')
         self.assertEqual(self.calls(), ['hotspot start 6g 40'])
 
+    def test_repeated_start_accepts_the_running_interface_and_tethering(self):
+        self.assertEqual(self.run_op('start', '40').returncode, 0)
+        before = self.record()
+        (self.root / 'net/mtap0').mkdir(parents=True)
+        r = self.run_op('start', '40', env={'TEST_TETHER_WANTED': 'true'})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('combined=already_active width=40', r.stdout)
+        self.assertEqual(self.calls(), ['six enable', 'hotspot start 6g 40'])
+        self.assertEqual(self.record(), before)
+        r = self.run_op('start', '80', env={'TEST_TETHER_WANTED': 'true'})
+        self.assertEqual(self.result(r)['reason'], 'hotspot_active_other_profile')
+
+    def test_failed_start_with_unresolved_recovery_retains_6ghz_until_stop(self):
+        (self.fix / 'hot.start_rc').write_text('72\n')
+        (self.fix / 'hot.start_out').write_text('REJECT start_timeout\n')
+        (self.fix / 'hot.failed_start_state').write_text('unresolved\n')
+        r = self.run_op('start')
+        self.assertEqual(r.returncode, 72, r.stdout + r.stderr)
+        self.assertEqual(self.result(r)['reason'], 'start_timeout')
+        self.assertEqual(self.calls(), ['six enable', 'hotspot start 6g 20'])
+        self.assertEqual(self.record()['owns_6g'], '1')
+        self.assertEqual(self.status()['six_ready'], '1')
+        self.assertEqual(self.run_op('stop').returncode, 0)
+        self.assertEqual(self.calls()[2:], ['hotspot stop', 'six disable'])
+        self.assertIsNone(self.record())
+
+    def test_failed_verification_keeps_6ghz_when_hotspot_stop_fails(self):
+        (self.fix / 'hot.start_state').write_text('unresolved\n')
+        (self.fix / 'hot.stop_rc').write_text('73\n')
+        (self.fix / 'hot.stop_out').write_text('REJECT interface_still_present\n')
+        r = self.run_op('start')
+        self.assertEqual(r.returncode, 69, r.stdout + r.stderr)
+        self.assertEqual(self.result(r)['reason'], 'hotspot_not_active_after_start')
+        self.assertEqual(self.calls(), ['six enable', 'hotspot start 6g 20', 'hotspot stop'])
+        self.assertEqual(self.record()['owns_6g'], '1')
+        self.assertEqual(self.status()['six_ready'], '1')
+        (self.fix / 'hot.stop_rc').write_text('0\n')
+        self.assertEqual(self.run_op('stop').returncode, 0)
+        self.assertEqual(self.calls()[3:], ['hotspot stop', 'six disable'])
+        self.assertIsNone(self.record())
+
+    def test_failed_start_with_unreadable_status_defers_rollback(self):
+        (self.fix / 'hot.start_rc').write_text('71\n')
+        (self.fix / 'hot.status_rc_after_start').write_text('73\n')
+        r = self.run_op('start')
+        self.assertEqual(r.returncode, 71, r.stdout + r.stderr)
+        self.assertEqual(self.calls(), ['six enable', 'hotspot start 6g 20'])
+        self.assertIn('rollback=deferred state=unknown rc=73', r.stdout)
+        self.assertEqual(self.record()['owns_6g'], '1')
+
+    def test_successful_stop_still_requires_confirmed_idle_before_rollback(self):
+        (self.fix / 'hot.start_state').write_text('unresolved\n')
+        (self.fix / 'hot.stop_state').write_text('unresolved\n')
+        r = self.run_op('start')
+        self.assertEqual(r.returncode, 69, r.stdout + r.stderr)
+        self.assertEqual(self.calls(), ['six enable', 'hotspot start 6g 20', 'hotspot stop'])
+        self.assertEqual(self.record()['owns_6g'], '1')
+        self.assertIn('rollback=deferred state=unresolved rc=0', r.stdout)
+
     def test_failed_hotspot_start_returns_6ghz_only_if_this_start_enabled_it(self):
         (self.fix / 'hot.start_rc').write_text('71\n')
         (self.fix / 'hot.start_out').write_text(
@@ -517,6 +578,19 @@ class RadioControlTests(RadioFixture):
         self.assertEqual(r.returncode, 69, r.stdout + r.stderr)
         self.assertEqual(self.calls(), ['six enable', 'six disable'])
         self.assertEqual(self.result(r)['reason'], 'sixg_not_active_after_enable')
+
+    def test_not_ready_enable_keeps_ownership_when_rollback_fails(self):
+        (self.fix / 'six.enable_state').write_text('restore_failed\n')
+        (self.fix / 'six.disable_rc').write_text('90\n')
+        r = self.run_op('start')
+        self.assertEqual(r.returncode, 69, r.stdout + r.stderr)
+        self.assertEqual(self.result(r)['reason'], 'sixg_not_active_after_enable')
+        self.assertEqual(self.calls(), ['six enable', 'six disable'])
+        self.assertEqual(self.record()['owns_6g'], '1')
+        (self.fix / 'six.disable_rc').write_text('0\n')
+        self.assertEqual(self.run_op('stop').returncode, 0)
+        self.assertEqual(self.calls(), ['six enable', 'six disable', 'six disable'])
+        self.assertIsNone(self.record())
 
     def test_station_that_rejoins_another_band_after_the_wifi_restart_rolls_back(self):
         (self.fix / 'wifi.after_enable').write_text(STA_5G)

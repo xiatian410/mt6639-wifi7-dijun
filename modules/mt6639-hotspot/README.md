@@ -21,7 +21,7 @@ $C logs              # 合并控制、热点、6GHz 三份日志的末尾
 echo "$HEX" | sh /data/adb/modules/mt6639-hotspot/bin/radio-key.sh /data/adb/modules/mt6639-hotspot set
 ```
 
-**一键开启的顺序。** ①只读预检；② 6GHz 事务未运行时调用 `mt6639-6g` 的 `enable`；③启用会重启 Wi-Fi，等待 STA 状态连续三次采样一致后重做上游预检；④ `control.sh start 6g 带宽`；⑤用受控状态检查和公开快照确认 `active / 6g / 带宽`，不一致就停止热点。任何一步失败，如果 6GHz 是本次启用的，就调用 `disable` 还回去；原本就在运行的 6GHz 不动。
+**一键开启的顺序。** ①只读预检；② 6GHz 事务未运行时调用 `mt6639-6g` 的 `enable`；③启用会重启 Wi-Fi，等待 STA 状态连续三次采样一致后重做上游预检；④ `control.sh start 6g 带宽`；⑤用受控状态检查和公开快照确认 `active / 6g / 带宽`，不一致就停止热点。任何一步失败，如果 6GHz 是本次启用的，只有确认热点已空闲后才调用 `disable` 还回去；热点停止失败、状态未知或仍在恢复时保留归属记录，稍后用「关闭」重试。原本就在运行的 6GHz 不动。
 
 **提前拒绝（不产生任何无线变更）。** 模块缺失/禁用/待移除、非 Enforcing、`ap.key` 缺失或权限不对、完整性校验失败、设备/SDK/内核/驱动不在已核对组合内、系统共享正在使用、`mtap0` 已存在、热点不是空闲、6GHz 事务需要先恢复、Wi-Fi 关闭、STA 连接在 2.4/5GHz（本驱动会把 6GHz AP 挪到 STA 信道，runner 本来也拒绝）、蜂窝模式下 10 秒内没有蜂窝 IPv4 地址。这些都是热点或 6GHz 控制器自己的门槛，放到前面只是避免「先重启一次 Wi-Fi 启用 6GHz、再失败、再重启一次还回去」。
 
@@ -33,11 +33,35 @@ echo "$HEX" | sh /data/adb/modules/mt6639-hotspot/bin/radio-key.sh /data/adb/mod
 
 **输出。** 操作过程逐行输出 `phase=<步骤>`，结束时输出一行 `result=ok` 或 `result=failed step=… reason=… detail=… rc=…`；`reason` 取自底层控制器最后一条 `REJECT`。退出码沿用现有约定：64 用法、66 缺输入、69 不可用、73 状态冲突、74 I/O、75 忙、77 权限。`status` 的 `six_card=` 是 6GHz 模块自己渲染的状态卡文本；状态输出只包含上游模式与 STA 频率，不含 SSID、BSSID 或口令。
 
-**热点密码。** `radio-key.sh set` 从标准输入读一行小写十六进制（口令各字节），解码后按 `softap_native_config.sh` 的同一条件校验（单行、8–63 个可打印 ASCII），以 0600 原子写入 `private/ap.key`。口令不出现在任何命令行参数、日志或输出里；`status` 只回答有没有可用的密钥文件。
+**热点密码。** `radio-key.sh set` 从标准输入读一行小写十六进制（口令各字节），解码后按 `softap_native_config.sh` 的同一条件校验（单行、8–63 个可打印 ASCII），以 0600 原子写入 `private/ap.key`。安装脚本不把明文口令放进自己的参数、日志或输出；`status` 只回答有没有可用的密钥文件。WebUI 通过 root shell 命令传递十六进制，编码只用于防止 shell 注入，不是加密；有权限查看管理器命令的程序仍可还原口令。
 
 **验证范围。** `tests/test_radio_control.py`、`tests/test_radio_key.py` 用两个模块控制器的替身覆盖排序、提前拒绝、回滚、归属和锁，并直接运行真实的热点 `control.sh status`、`status_snapshot.sh` 与 6GHz `control.sh status` 核对字段；在 dash、mksh R59、busybox ash 以及 gawk、mawk、busybox awk 下通过。没有在手机上运行，未验证真实的 6GHz 启用、热点启动或客户端联网。
 
 这是显式操作型实验模块，默认关闭。KernelSU 的“操作”按钮在空闲时启动独立 6GHz EHT 热点，在已有会话时执行 checked stop。源码候选已通过独立的 Settings 请求桥接线，提供受 readiness 门禁保护的频段/带宽选择、启动与停止；不接管原厂热点总开关。下文 v0.2.9/code17、UI v0.2.6/code12 及部署状态为历史记录，不代表当前候选。历史固定哈希及安装前提见[交付手册](../../docs/交付-MT6639候选安装与回滚-20261026.md)。已冻结的历史ZIP字节保持不变，本文的后续说明不代表包内历史README已更新。
+
+## WebUI 构建与安装
+
+本版本带有使用 Miuix KMP 0.9.4 实际组件构建的 Kotlin/Wasm 控制台。控制台需要 KernelSU 管理器支持 WebUI，建议使用 KernelSU WebView 119 或更新版本。浏览器中直接打开源码页只会进入明确标注的演示模式，不会控制设备。
+
+在 Linux 构建主机安装 JDK 21、Gradle 9.x、Python 3 `fontTools`、Noto Sans CJK SC 字体及其许可文本；Gradle 首次构建还需访问 Maven Central 和 npm registry。完整干净构建（输出目录必须不存在）：
+
+```sh
+GRADLE=/path/to/gradle-9.x \\
+MT6639_WEBUI_FONT_DIR=/path/to/noto-fonts \\
+MT6639_WEBUI_FONT_NOTICE=/path/to/fonts-noto-cjk-copyright \\
+sh tools/build_webui.sh /tmp/mt6639-webroot
+sh tools/build_hotspot_module.sh \\
+  /path/to/pinned-hostapd-bin \\
+  /path/to/native-tether.dex \\
+  /path/to/softap-profile.dex \\
+  /path/to/delete_ifindex \\
+  /tmp/mt6639-hotspot-v0.3.0-dijun.1.zip \\
+  /tmp/mt6639-webroot
+```
+
+第二个脚本继续核验所有已固定哈希的原生输入；WebUI 文件也进入模块 `SHA256SUMS`，安装后会由同一 `verify-module.sh` 校验。`tools/build_webui.sh` 会先运行 Kotlin/JVM 单元测试，再编译 Wasm；Gradle 依赖与 npm Wasm 工具链首次运行需要网络。它不安装模块、不重启 WLAN，也不触碰设备。
+
+更新时保留现有 `mt6639-6g` 模块，更新 `mt6639-hotspot` 并按 KernelSU 提示重启；在热点模块 WebUI 设置密码、选择带宽后使用一个 6GHz 热点开关。两个 KernelSU 模块 ID 仍然独立。请先确认设备、内核和原厂 WLAN 驱动处于已审查范围，且 SELinux 为 Enforcing。当前验证仅覆盖宿主测试、桌面 Chromium 和模拟 KernelSU 桥接；Android WebView、设备热点启动、客户端关联与联网尚未验证。
 
 ## 安装前
 

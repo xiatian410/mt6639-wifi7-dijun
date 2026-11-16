@@ -46,6 +46,7 @@ class HotspotModuleTests(unittest.TestCase):
             MOD / "bin/softap_24g_once.sh",
             REPO / "tools/softap_native_once.sh",
             REPO / "tools/build_hotspot_module.sh",
+            REPO / "tools/build_webui.sh",
             REPO / "tools/build_delete_ifindex.sh",
         ]
         for script in scripts:
@@ -361,6 +362,51 @@ process_one() { echo process >> "$D/calls"; }
                 self.assertEqual(archive.read("module.prop"), archive.read("module.prop.template"))
                 self.assertEqual(archive.read("bin/compat.sh"), (REPO / "modules/mt6639-6g/bin/compat.sh").read_bytes())
                 self.assertEqual(archive.read("bin/compatibility.conf"), (REPO / "modules/mt6639-6g/compatibility.conf").read_bytes())
+
+                # A WebUI build is optional for the lower-level module builder,
+                # but when supplied every runtime asset is checksummed and the
+                # installed layout verifies after KernelSU removes installer files.
+                webroot = Path(td) / "webroot"
+                webroot.mkdir()
+                (webroot / "index.html").write_text("<html>fixture</html>")
+                (webroot / "console.js").write_text("// fixture")
+                (webroot / "bridge.js").write_text("// fixture")
+                (webroot / "app.wasm").write_bytes(b"\0asm")
+                (webroot / "WEBUI-PROVENANCE.txt").write_text("miuix=0.9.4\n")
+                (webroot / "fonts").mkdir()
+                (webroot / "fonts" / "NOTICE.txt").write_text("font license\n")
+                webui_zip = Path(td) / "mt6639-hotspot-webui.zip"
+                result = subprocess.run([
+                    "sh", str(REPO / "tools/build_hotspot_module.sh"),
+                    str(HOSTAPD_DIR), str(DEX_TETHER), str(DEX_PROFILE),
+                    str(DELETE_IFINDEX), str(webui_zip), str(webroot),
+                ], capture_output=True, text=True, timeout=90)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                with zipfile.ZipFile(webui_zip) as webui_archive:
+                    webui_names = set(webui_archive.namelist())
+                    self.assertIn("webroot/index.html", webui_names)
+                    self.assertIn("webroot/app.wasm", webui_names)
+                    self.assertIn("webroot/fonts/NOTICE.txt", webui_names)
+                    webui_sums = webui_archive.read("SHA256SUMS").decode()
+                    self.assertIn("  webroot/index.html\n", webui_sums)
+                    self.assertIn("  webroot/app.wasm\n", webui_sums)
+                    webui_install = Path(td) / "webui-installed"
+                    webui_archive.extractall(webui_install)
+                webui_env = dict(os.environ, MODPATH=str(webui_install))
+                webui_hook = subprocess.run(["sh", str(webui_install / "customize.sh")],
+                                             env=webui_env, capture_output=True, text=True)
+                self.assertEqual(webui_hook.returncode, 0, webui_hook.stderr)
+                (webui_install / "customize.sh").unlink(missing_ok=True)
+                self.assertEqual(subprocess.run(
+                    ["sh", str(webui_install / "bin/verify-module.sh"), str(webui_install)],
+                    capture_output=True, text=True,
+                ).returncode, 0)
+                webui_asset = webui_install / "webroot/console.js"
+                webui_asset.write_text("// corrupted")
+                self.assertNotEqual(subprocess.run(
+                    ["sh", str(webui_install / "bin/verify-module.sh"), str(webui_install)],
+                    capture_output=True, text=True,
+                ).returncode, 0)
 
                 # KernelSU installer.sh (200818cabf8f) sources customize.sh,
                 # then deletes it and README.md. Test the installed layout,

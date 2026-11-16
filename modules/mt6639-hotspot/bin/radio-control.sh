@@ -399,6 +399,15 @@ record_save() {
 # ---- operations --------------------------------------------------------------
 six_rollback() {
     phase six_rollback
+    # A failed start may still own an interface or have recovery in flight.
+    # Restoring 6GHz restarts Wi-Fi: retain ownership until hotspot teardown is
+    # positively complete, just as stop and the explicit 6GHz switch require.
+    hotspot_probe || :
+    if [ "$hot_rc" != 0 ] || [ "$hot_state" != idle ]; then
+        log "rollback: hotspot not confirmed idle state=$hot_state rc=$hot_rc; record kept"
+        echo "rollback=deferred state=$hot_state rc=$hot_rc"
+        return 0
+    fi
     run_six 200 disable
     rb_rc=$?
     [ -z "$sub_out" ] || printf '%s\n' "$sub_out"
@@ -426,10 +435,6 @@ op_start() {
     sh "$HOTSPOT/bin/verify-module.sh" "$HOTSPOT" 8>&- >/dev/null 2>&1 || {
         fail preflight module_asset_hash_mismatch 69; return $?; }
     identity_probe || { fail preflight "$identity_reason" 69; return $?; }
-    [ ! -e /sys/class/net/mtap0 ] || { fail preflight mtap0_exists 73; return $?; }
-    timeout 5 dumpsys tethering --short 8>&- 2>/dev/null |
-        grep -Fxq '    Upstream wanted: false' || {
-        fail preflight tethering_not_idle 73; return $?; }
     hotspot_probe
     case "$?" in
         0) ;;
@@ -448,6 +453,11 @@ op_start() {
             return $? ;;
         *) fail preflight hotspot_not_idle 73 "state=$hot_state"; return $? ;;
     esac
+    # These are conditions for creating a new hotspot, not for the no-op above.
+    [ ! -e /sys/class/net/mtap0 ] || { fail preflight mtap0_exists 73; return $?; }
+    timeout 5 dumpsys tethering --short 8>&- 2>/dev/null |
+        grep -Fxq '    Upstream wanted: false' || {
+        fail preflight tethering_not_idle 73; return $?; }
     six_probe || [ "$six_tx" = invalid ] || {
         fail preflight sixg_status_unavailable 69 "rc=$six_rc"; return $?; }
     enabled_now=0
@@ -474,18 +484,21 @@ op_start() {
             return $?
         fi
         six_probe || :
+        # Retain a known transaction even if readiness or rollback fails, so a
+        # later stop can finish recovery without losing our ownership evidence.
+        if [ "$six_tx" = present ]; then
+            record_save 1 "$six_tx_path" "$width" || {
+                six_rollback
+                fail six_enable session_record_unwritable 74
+                return $?
+            }
+        fi
         if [ "$six_ready" != 1 ]; then
             six_rollback
             fail six_enable sixg_not_active_after_enable 69 "state=$six_state guardian=$six_guardian"
             return $?
         fi
         owns=1
-        # Ownership is durable before the hotspot is touched.
-        record_save 1 "$six_tx_path" "$width" || {
-            six_rollback
-            fail six_enable session_record_unwritable 74
-            return $?
-        }
         phase sta_settle
         sta_settle
         upstream_preflight
@@ -514,12 +527,19 @@ op_start() {
     phase verify
     hotspot_probe || :
     snapshot_read || :
-    if [ "$hot_state" != active ] || [ "$snap_band" != 6g ] || [ "$snap_width" != "$width" ]; then
+    if [ "$hot_rc" != 0 ] || [ "$hot_state" != active ] ||
+        [ "$snap_band" != 6g ] || [ "$snap_width" != "$width" ]; then
+        verify_detail="state=$hot_state band=$snap_band width=$snap_width"
         run_hotspot 360 stop
+        stop_rc=$?
         [ -z "$sub_out" ] || printf '%s\n' "$sub_out"
-        [ "$enabled_now" = 0 ] || six_rollback
-        fail verify hotspot_not_active_after_start 69 \
-            "state=$hot_state band=$snap_band width=$snap_width"
+        if [ "$stop_rc" = 0 ]; then
+            [ "$enabled_now" = 0 ] || six_rollback
+        else
+            log "start: hotspot stop failed rc=$stop_rc; record kept"
+            echo "rollback=deferred hotspot_stop_rc=$stop_rc"
+        fi
+        fail verify hotspot_not_active_after_start 69 "$verify_detail"
         return $?
     fi
     # The hotspot is up; a record that cannot be refreshed must not take it down.
