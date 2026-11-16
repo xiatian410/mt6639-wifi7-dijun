@@ -118,6 +118,93 @@ class ControllerTest {
     }
 
     @Test
+    fun nameSaveRoundTripsAndOnlyRunsWhileIdle() = runTest {
+        val spy = Spy(DemoBackend("ready"))
+        val c = ConsoleController(spy, this)
+        assertNull(c.saveName("new"), "not loaded")
+        assertTrue(spy.commands.isEmpty())
+        c.refresh().join()
+        for (bad in listOf("", "中".repeat(11), "bad\nname", "\uD800")) assertNull(c.saveName(bad))
+        val name = "中文😀 '\$(id);`id`"
+        val save = assertNotNull(c.saveName(name))
+        assertEquals(OpKind.SetName, c.state.value.op?.kind)
+        assertFalse(Presentation.nameEnabled(c.state.value))
+        assertNull(c.saveName("another"))
+        save.join()
+        assertNull(c.state.value.notice)
+        assertEquals(name, assertNotNull(c.state.value.status).ssid)
+        assertEquals(1, spy.commands.count { it == Commands.setName(name) })
+        assertNotNull(c.chooseWidth(160)).join()
+        assertEquals(name, assertNotNull(c.state.value.status).ssid, "custom names do not change with width")
+        assertNotNull(c.setHotspot(true)).join()
+        assertEquals(name, assertNotNull(c.state.value.status).ssid)
+        assertNull(c.saveName("running"))
+        assertNotNull(c.setHotspot(false)).join()
+        assertNotNull(c.saveName("next start")).join()
+        assertEquals("next start", assertNotNull(c.state.value.status).ssid)
+        assertEquals(1, spy.maxRunning)
+    }
+
+    @Test
+    fun nameSaveRejectsBusyUnknownAndFailedStatus() = runTest {
+        val inner = DemoBackend("ready", stepMs = 0)
+        val spy = Spy(inner)
+        val c = ConsoleController(spy, this)
+        for (line in listOf("busy=1", "hotspot_state=unknown", "hotspot_state=starting", "hotspot_state=stopping", "hotspot_state=unresolved")) {
+            spy.override = { command, out ->
+                inner.run(command) { e, text ->
+                    out(e, if (text.substringBefore('=') == line.substringBefore('=')) line else text)
+                }
+            }
+            c.refresh().join()
+            assertNull(c.saveName("blocked"), line)
+        }
+        spy.override = { _, _ -> 127 }
+        c.refresh().join()
+        assertNull(c.saveName("failed"))
+        assertTrue(spy.commands.all { it == Commands.STATUS_FULL })
+    }
+
+    @Test
+    fun queuedNameSaveRechecksStatusAndReportsBackendRefusal() = runTest {
+        val inner = DemoBackend("ready")
+        val spy = Spy(inner)
+        val c = ConsoleController(spy, this)
+        c.refresh().join()
+        spy.override = { command, out ->
+            if (command == Commands.STATUS_FULL) inner.run(command) { e, line ->
+                out(e, if (line == "hotspot_state=idle") "hotspot_state=active" else line)
+            } else null
+        }
+        val refresh = c.refresh()
+        runCurrent()
+        val save = assertNotNull(c.saveName("queued"))
+        refresh.join()
+        save.join()
+        assertFalse(spy.commands.any { it.endsWith(Commands.SET_NAME_SUFFIX) })
+        assertEquals("网络名称没有保存", assertNotNull(c.state.value.notice).title)
+        spy.override = null
+        c.refresh().join()
+        spy.override = { command, out ->
+            if (command.endsWith(Commands.SET_NAME_SUFFIX)) {
+                out(true, "REJECT name_unwritable")
+                74
+            } else null
+        }
+        assertNotNull(c.saveName("refused")).join()
+        assertNull(assertNotNull(c.state.value.status).customSsid)
+        assertEquals("REJECT name_unwritable", assertNotNull(c.state.value.notice).details)
+    }
+
+    @Test
+    fun demoRejectsMalformedNameCommandsAndChangesWhileActive() = runTest {
+        val demo = DemoBackend("ready", stepMs = 0)
+        assertEquals(65, demo.run("echo c080${Commands.SET_NAME_SUFFIX}") { _, _ -> })
+        assertEquals(0, demo.run(Commands.start(20)) { _, _ -> })
+        assertEquals(73, demo.run(Commands.setName("blocked")) { _, _ -> })
+    }
+
+    @Test
     fun stationOnAnotherBandIsShownBeforeAndExplainedAfter() = runTest {
         val c = ConsoleController(DemoBackend("sta5g"), this)
         c.refresh().join()

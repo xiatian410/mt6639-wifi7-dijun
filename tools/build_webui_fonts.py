@@ -40,7 +40,7 @@ def characters(paths):
     found = set()
     for path in paths:
         for ch in path.read_text(encoding="utf-8"):
-            if ch >= " " and ch != "\x7f":
+            if ch >= " " and ch != "\x7f" and ch not in "  ":
                 found.add(ch)
     return found
 

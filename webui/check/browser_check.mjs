@@ -42,7 +42,7 @@ await mkdir(outDir, { recursive: true });
 // A stand-in for the manager's `ksu` object that answers like the scripts do,
 // delivered the way KernelSU delivers it: as separate script evaluations.
 const ksuMock = () => {
-  const state = { hotspot: 'idle', width: 20, pref: 80, key: true, six: true };
+  const state = { hotspot: 'idle', width: 20, pref: 80, key: true, six: true, ssidHex: '' };
   const failStart = new URLSearchParams(location.search).get('fail') === 'start';
   window.__commands = [];
   const status = (full) => [
@@ -52,14 +52,14 @@ const ksuMock = () => {
     `six_tx=${state.six ? 'present' : 'none'}`, `six_guardian=${state.six ? 'alive' : 'none'}`,
     'six_profile=os4-g284297', 'six_compat_error=none', 'six_boot_default=1', `six_ready=${state.six ? 1 : 0}`,
     'six_card=[事务运行] 适配：os4-g284297 | 内核：匹配 | 驱动：匹配 | 配置：临时配置 | 事务：运行 | 6GHz：60个已注册信道 | 连接：未连接 | 更新：12:34:56。信道注册不代表业务通过。',
-    'hotspot_module=present', 'hotspot_version=v0.3.0-dijun.1',
+    'hotspot_module=present', 'hotspot_version=v0.3.1-dijun.1',
     ...(full ? ['hotspot_status_rc=0', `hotspot_state=${state.hotspot}`,
       `hotspot_freq=${state.hotspot === 'active' ? 6135 : 'none'}`,
       `hotspot_channel=${state.hotspot === 'active' ? 37 : 'none'}`] : [`hotspot_state=${state.hotspot}`]),
     `hotspot_checked=${full ? 1 : 0}`, 'hotspot_snapshot=1',
     `hotspot_band=${state.hotspot === 'idle' ? 'none' : '6g'}`,
     `hotspot_width=${state.hotspot === 'idle' ? 'none' : state.width}`, 'hotspot_age=0',
-    'enforcing=1', `ap_key=${state.key ? 1 : 0}`,
+    'enforcing=1', `ap_key=${state.key ? 1 : 0}`, 'ssid_status_rc=0', `ssid_hex=${state.ssidHex}`,
     ...(full ? ['integrity=1', 'identity=1', 'identity_reason=none'] : []),
     'wifi=1', 'sta=disconnected', 'sta_freq=none', 'upstream=cell', 'upstream_ok=1',
     'upstream_reason=none', 'cell_data=1', 'session_owns_6g=0', `pref_width=${state.pref}`, 'end=1',
@@ -67,6 +67,11 @@ const ksuMock = () => {
   const answer = (command) => {
     const args = command.split('mt6639-hotspot ').pop().split(' ');
     if (command.includes('radio-key.sh')) { state.key = true; return { out: ['ap_key=1'], code: 0 }; }
+    if (command.includes('radio-name.sh')) {
+      const hex = command.split(' ')[1];
+      if (hex) state.ssidHex = hex;
+      return { out: [`ssid_hex=${state.ssidHex}`], code: 0 };
+    }
     if (args[0] === 'status') return { out: status(args[1] === 'full'), code: 0 };
     if (args[0] === 'start' && failStart) {
       return {
@@ -130,6 +135,23 @@ const scenarios = {
     query: '?fail=start', scheme: 'dark', ksu: true,
     steps: [['tap', 359, 141], ['wait', 2600], ['shot', 'dialog'], ['sent', ' start 80']],
   },
+  ksu_name: {
+    query: '', scheme: 'light', ksu: true,
+    steps: [
+      ['tap', 200, 304], ['wait', 800], ['shot', 'name_dialog'],
+      ['tap', 200, 740], ['press', 'ControlOrMeta+A'], ['insert', 'Lab 演示'], ['wait', 200],
+      ['shot', 'name_valid'], ['tap', 296, 830], ['wait', 1200],
+      ['shot', 'name_saved'],
+        ['sentMatch', '4c616220e6bc94e7a4ba'], ['sentMatch', 'radio-name.sh.* set'],
+      ['sentMatch', 'radio-name.sh.* set'],
+      ['neverSent', 'Lab 演示'],
+    ],
+  },
+  ksu_name_active: {
+    query: '', scheme: 'light', ksu: true,
+    steps: [['tap', 359, 141], ['wait', 4200], ['sent', ' start 80'],
+      ['tap', 200, 304], ['wait', 800], ['shot', 'disabled'], ['neverSent', 'radio-name.sh']],
+  },
   ksu_key: {
     query: '', scheme: 'light', ksu: true,
     steps: [
@@ -152,6 +174,10 @@ const scenarios = {
   scroll: {
     query: '?demo=sta5g', scheme: 'light',
     steps: [['wheel', 900], ['wait', 900], ['shot', 'conditions'], ['wheel', 900], ['wait', 900], ['shot', 'bottom']],
+  },
+  touch_scroll: {
+    query: '?demo=active', scheme: 'light',
+    steps: [['touchCycles', 6], ['shot', 'after']],
   },
   wide: { query: '?demo=active', scheme: 'light', viewport: { width: 1180, height: 820 } },
 };
@@ -188,6 +214,37 @@ for (const name of wanted.length ? wanted : Object.keys(scenarios)) {
     if (action === 'tap') await page.touchscreen.tap(a, b);
     else if (action === 'wait') await page.waitForTimeout(a);
     else if (action === 'shot') await page.screenshot({ path: join(outDir, `${name}_${a}.png`) });
+    else if (action === 'touchCycles') {
+      const cdp = await context.newCDPSession(page);
+      await page.evaluate(() => {
+        window.__touchCancels = 0;
+        document.addEventListener('pointercancel', () => window.__touchCancels++);
+      });
+      const swipe = async (from, to) => {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 206, y: from }] });
+        for (let i = 1; i <= 16; i++) {
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 206, y: from + (to - from) * i / 16 }] });
+          await page.waitForTimeout(20);
+        }
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await page.waitForTimeout(750);
+      };
+      for (let i = 0; i < a; i++) {
+        const before = await page.screenshot();
+        await swipe(740, 250);
+        const down = await page.screenshot();
+        if (before.equals(down)) problems.push(`touch cycle ${i}: upward swipe did not move content`);
+        await page.screenshot({ path: join(outDir, `${name}_down_${i}.png`) });
+        await swipe(250, 740);
+        const up = await page.screenshot();
+        if (down.equals(up)) problems.push(`touch cycle ${i}: downward swipe did not move content`);
+      }
+      const cancels = await page.evaluate(() => window.__touchCancels);
+      if (cancels) problems.push(`browser cancelled ${cancels} touch gesture(s)`);
+      await cdp.detach();
+    }
+    else if (action === 'press') await page.keyboard.press(a);
+    else if (action === 'insert') await page.keyboard.insertText(a);
     else if (action === 'type') await page.keyboard.type(a, { delay: 20 });
     else if (action === 'wheel') { await page.mouse.move(206, 600); await page.mouse.wheel(0, a); }
     else if (action === 'sent' && !(await sent()).some((c) => c.endsWith(a))) problems.push(`no command ending in "${a}"`);

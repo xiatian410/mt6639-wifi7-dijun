@@ -1,8 +1,8 @@
 # MT6639 Native EHT Hotspot
 
-当前源码版本为 **v0.3.0-dijun.1 / code35**：新增 6GHz 与热点的合并控制入口，「操作」按钮改为一键开启/关闭两层（见下节）；热点自身的启动、停止与恢复逻辑没有改动。以下为 v0.2.26-dijun.1 / code34 的说明，仍然适用。原生热点不再按旧 OTA fingerprint 拒绝已核对内核/驱动；蜂窝和普通 Wi-Fi 上游不再强制提供实验网络恢复口令。修复 v0.2.24 安装后完整性检查拒绝：KernelSU 在安装结束时删除 `customize.sh`，它不应出现在运行时的 `SHA256SUMS` 中。其余静态脚本、原生程序、DEX 和元数据模板仍校验；动态描述更新方式不变。请安装新构建包，不要在设备上重生成校验清单或绕过校验。本次未验证实机热点启动或客户端联网。
+当前源码版本为 **v0.3.1-dijun.1 / code36**：新增可编辑的 6GHz 热点名称（下次启动生效）和单页触控滚动修复。以下保留的 v0.3.0-dijun.1 / code35 及 v0.2.26-dijun.1 / code34 说明仍适用。原生热点不再按旧 OTA fingerprint 拒绝已核对内核/驱动；蜂窝和普通 Wi-Fi 上游不再强制提供实验网络恢复口令。修复 v0.2.24 安装后完整性检查拒绝：KernelSU 在安装结束时删除 `customize.sh`，它不应出现在运行时的 `SHA256SUMS` 中。其余静态脚本、原生程序、DEX 和元数据模板仍校验；动态描述更新方式不变。请安装新构建包，不要在设备上重生成校验清单或绕过校验。本次未验证实机热点启动或客户端联网。
 
-## 合并控制：6GHz + 热点（v0.3.0-dijun.1）
+## 合并控制：6GHz + 热点（入口，v0.3.0-dijun.1）
 
 `bin/radio-control.sh` 把「启用 6GHz」和「启动 6GHz 热点」合成一个入口，模块的「操作」按钮与 WebUI 控制台都走它。它自己不改无线状态：每一步仍然调用 `mt6639-6g` 与本模块各自的 `control.sh`，两边原有的锁、校验、恢复逻辑照旧是最终裁决；它只负责排序、在已知必然失败时提前拒绝，以及把自己启用的 6GHz 还回去。
 
@@ -31,7 +31,7 @@ echo "$HEX" | sh /data/adb/modules/mt6639-hotspot/bin/radio-key.sh /data/adb/mod
 
 **锁。** `/data/adb/mt6639-radio/control.lock` 只串行化本控制器的操作；所有子进程都以 `8>&-` 启动。6GHz 看护进程与热点 runner 比脚本活得久且不会关闭继承的描述符，继承到锁就会一直占着。受控的热点状态检查沿用 `status-card.sh poll` 的协议：先拿 `action.lock`，热点操作进行中就跳过，只读快照。
 
-**输出。** 操作过程逐行输出 `phase=<步骤>`，结束时输出一行 `result=ok` 或 `result=failed step=… reason=… detail=… rc=…`；`reason` 取自底层控制器最后一条 `REJECT`。退出码沿用现有约定：64 用法、66 缺输入、69 不可用、73 状态冲突、74 I/O、75 忙、77 权限。`status` 的 `six_card=` 是 6GHz 模块自己渲染的状态卡文本；状态输出只包含上游模式与 STA 频率，不含 SSID、BSSID 或口令。
+**输出。** 操作过程逐行输出 `phase=<步骤>`，结束时输出一行 `result=ok` 或 `result=failed step=… reason=… detail=… rc=…`；`reason` 取自底层控制器最后一条 `REJECT`。退出码沿用现有约定：64 用法、66 缺输入、69 不可用、73 状态冲突、74 I/O、75 忙、77 权限。`status` 的 `six_card=` 是 6GHz 模块自己渲染的状态卡文本；状态输出包含上游模式与 STA 频率，不含上游 SSID、BSSID 或口令；`ssid_hex` 是保存的本机热点名称（十六进制，不是加密），不是运行中 AP 名称的独立验证。
 
 **热点密码。** `radio-key.sh set` 从标准输入读一行小写十六进制（口令各字节），解码后按 `softap_native_config.sh` 的同一条件校验（单行、8–63 个可打印 ASCII），以 0600 原子写入 `private/ap.key`。安装脚本不把明文口令放进自己的参数、日志或输出；`status` 只回答有没有可用的密钥文件。WebUI 通过 root shell 命令传递十六进制，编码只用于防止 shell 注入，不是加密；有权限查看管理器命令的程序仍可还原口令。
 
@@ -42,6 +42,8 @@ echo "$HEX" | sh /data/adb/modules/mt6639-hotspot/bin/radio-key.sh /data/adb/mod
 ## WebUI 构建与安装
 
 本版本带有使用 Miuix KMP 0.9.4 实际组件构建的 Kotlin/Wasm 控制台。控制台需要 KernelSU 管理器支持 WebUI，建议使用 KernelSU WebView 119 或更新版本。浏览器中直接打开源码页只会进入明确标注的演示模式，不会控制设备。
+
+设置页可编辑热点网络名称：支持 UTF-8，最多 32 字节，拒绝控制字符和换行。名称以十六进制保存在 root 私有目录，运行中的 AP 不会被热改名；先停止热点、保存名称，再次启动时应用。未设置自定义名称时继续使用原有频段/带宽默认名；保存空名称会被拒绝。Web 控制台只把十六进制送入固定 setter，名称本身不会被解释为 shell 命令。
 
 在 Linux 构建主机安装 JDK 21、Gradle 9.x、Python 3 `fontTools`、Noto Sans CJK SC 字体及其许可文本；Gradle 首次构建还需访问 Maven Central 和 npm registry。完整干净构建（输出目录必须不存在）：
 

@@ -204,6 +204,7 @@ class RadioFixture(unittest.TestCase):
         self.bootfile.write_text(BOOT + '\n')
         shutil.copytree(HOTSPOT, self.mod)
         # The build copies the reviewed compatibility table next to the scripts.
+        shutil.copyfile(ROOT / 'tools/ssid_hex.sh', self.mod / 'bin/ssid_hex.sh')
         shutil.copyfile(SIX / 'bin/compat.sh', self.mod / 'bin/compat.sh')
         shutil.copyfile(SIX / 'compatibility.conf', self.mod / 'bin/compatibility.conf')
         (self.mod / 'bin/android-env.sh').write_text('android_env_ready() { return 0; }\n')

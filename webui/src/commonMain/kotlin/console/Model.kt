@@ -18,7 +18,7 @@ val STATUS_KEYS: List<String> = listOf(
     "hotspot_band", "hotspot_width", "hotspot_age",
     "enforcing", "ap_key", "integrity", "identity", "identity_reason",
     "wifi", "sta", "sta_freq", "upstream", "upstream_ok", "upstream_reason", "cell_data",
-    "session_owns_6g", "pref_width", "end",
+    "session_owns_6g", "pref_width", "ssid_status_rc", "ssid_hex", "end",
 )
 
 enum class ModuleState { Present, Disabled, Removing, Missing, Unknown }
@@ -66,6 +66,8 @@ data class RadioStatus(
     val cellData: Boolean?,
     val sessionOwns6g: Boolean,
     val prefWidth: Int,
+    /** Null means the width-dependent default; custom names are validated UTF-8. */
+    val customSsid: String? = null,
 ) {
     /** The one-tap state: a 6GHz hotspot that the controller confirmed or published. */
     val hotspotOn: Boolean get() = hotspotState == HotspotState.Active
@@ -73,7 +75,7 @@ data class RadioStatus(
     /** Width shown for the network name: the running one, otherwise the saved choice. */
     val shownWidth: Int get() = if (hotspotOn) hotspotWidth ?: prefWidth else prefWidth
 
-    val ssid: String get() = "MT6639-Native-6g-$shownWidth"
+    val ssid: String get() = customSsid ?: "MT6639-Native-6g-$shownWidth"
 }
 
 private fun flag(value: String?): Boolean? = when (value) {
@@ -118,6 +120,11 @@ fun parseStatus(text: String): RadioStatus? {
     val f = keyValues(text)
     if (f["schema"] != STATUS_SCHEMA || f["end"] != "1") return null
     val width = f["hotspot_width"]?.toIntOrNull()?.takeIf { it in WIDTHS }
+    // Do not turn an unreadable/unsafe configuration into a misleading default.
+    if ("ssid_status_rc" in f && (f["ssid_status_rc"] != "0" || "ssid_hex" !in f)) return null
+    // Older status output without either key also uses the default name.
+    val ssidHex = f["ssid_hex"].orEmpty()
+    val customSsid = if (ssidHex.isEmpty()) null else decodeSsidHex(ssidHex) ?: return null
     return RadioStatus(
         full = f["mode"] == "full",
         boot = f["boot"].orEmpty(),
@@ -165,6 +172,7 @@ fun parseStatus(text: String): RadioStatus? {
         cellData = flag(f["cell_data"]),
         sessionOwns6g = f["session_owns_6g"] == "1",
         prefWidth = f["pref_width"]?.toIntOrNull()?.takeIf { it in WIDTHS } ?: 20,
+        customSsid = customSsid,
     )
 }
 
@@ -228,6 +236,47 @@ fun parseResult(lines: List<String>, exitCode: Int): OpResult {
         else -> "no_result"
     }
     return OpResult(false, "launch", reason, "none", exitCode)
+}
+
+/** SSIDs are 1–32 UTF-8 bytes, not characters. Never replace malformed UTF-16. */
+fun ssidProblem(name: String): String? {
+    if (name.isEmpty()) return "请输入网络名称"
+    var i = 0
+    while (i < name.length) {
+        val c = name[i]
+        when {
+            c.code in 0..31 || c.code in 127..159 || c == ' ' || c == ' ' ->
+                return "名称不能包含控制字符或换行"
+            c in '\uD800'..'\uDBFF' -> {
+                if (i + 1 >= name.length || name[i + 1] !in '\uDC00'..'\uDFFF') return "名称包含无效字符"
+                i++
+            }
+            c in '\uDC00'..'\uDFFF' -> return "名称包含无效字符"
+        }
+        i++
+    }
+    if (name.encodeToByteArray().size > 32) return "最多 32 个 UTF-8 字节（中文通常占 3 个，表情通常占 4 个）"
+    return null
+}
+
+/** The only form of a network name that may enter a root shell command. */
+fun ssidHex(name: String): String {
+    require(ssidProblem(name) == null)
+    val digits = "0123456789abcdef"
+    return buildString {
+        for (byte in name.encodeToByteArray()) {
+            val value = byte.toInt() and 255
+            append(digits[value shr 4]).append(digits[value and 15])
+        }
+    }
+}
+
+/** Strict wire decoder: rejects bad hex, malformed UTF-8 and invalid names. */
+fun decodeSsidHex(hex: String): String? {
+    if (hex.length !in 2..64 || hex.length % 2 != 0 || hex.any { it !in '0'..'9' && it !in 'a'..'f' }) return null
+    val bytes = ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+    val name = runCatching { bytes.decodeToString(throwOnInvalidSequence = true) }.getOrNull() ?: return null
+    return name.takeIf { ssidProblem(it) == null }
 }
 
 /** Null when [passphrase] is acceptable, otherwise the reason shown under the field. */

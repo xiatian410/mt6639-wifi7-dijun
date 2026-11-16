@@ -239,7 +239,7 @@ process_one() { echo process >> "$D/calls"; }
             task = root / "mt6639-native-ap-test"
             task.mkdir(mode=0o700)
             known = [
-                "softap_native_once.sh", "softap_native_config.sh", "hostapd",
+                "softap_native_once.sh", "softap_native_config.sh", "ssid_hex.sh", "ap.ssid.hex", "hostapd",
                 "hostapd_cli", "delete_ifindex", "native-tether.dex",
                 "softap-profile.dex", "twt_recover.sh", "ap.key",
                 "hotspot-identity.sh", "hotspot-upstream.sh", "compat.sh", "compatibility.conf",
@@ -338,6 +338,7 @@ process_one() { echo process >> "$D/calls"; }
                 for required in {
                     "module.prop", "module.prop.template", "config.conf", "customize.sh", "action.sh", "service.sh",
                     "bin/control.sh", "bin/radio-control.sh", "bin/radio-key.sh",
+                    "bin/radio-name.sh", "bin/ssid_hex.sh",
                     "bin/hostapd", "bin/hostapd_cli",
                     "bin/status_snapshot.sh", "bin/status-card.sh", "bin/verify-module.sh",
                     "bin/hotspot-identity.sh", "bin/hotspot-upstream.sh", "bin/compat.sh", "bin/compatibility.conf",
@@ -430,7 +431,7 @@ process_one() { echo process >> "$D/calls"; }
                                       else line for line in prop.read_text().splitlines()) + '\n')
             self.assertEqual(verify().returncode, 0)
             original = prop.read_bytes()
-            prop.write_text(prop.read_text().replace('versionCode=35', 'versionCode=99'))
+            prop.write_text(prop.read_text().replace('versionCode=36', 'versionCode=99'))
             self.assertNotEqual(verify().returncode, 0)
             prop.write_bytes(original)
             asset = installed / "bin/control.sh"

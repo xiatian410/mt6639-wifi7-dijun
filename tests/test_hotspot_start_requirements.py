@@ -21,6 +21,7 @@ class HotspotStartRequirements(unittest.TestCase):
         self.mod = self.root / 'module'
         shutil.copytree(HOTSPOT, self.mod)
         self.assets = self.mod / 'bin'
+        shutil.copyfile(ROOT / 'tools/ssid_hex.sh', self.assets / 'ssid_hex.sh')
         shutil.copyfile(SIX / 'bin/compat.sh', self.assets / 'compat.sh')
         shutil.copyfile(SIX / 'compatibility.conf', self.assets / 'compatibility.conf')
         self.stub = self.root / 'stub'
@@ -196,7 +197,7 @@ boot_id() { return 70; }
             'hostapd_cli': '2da7d467b7b2628c4da40fb5ccc101b17f8b279bd9c038c32e4ae6e5b2924a42',
             'delete_ifindex': 'd20169f8733dc3bd2813806b3deda79e84b497e40e4a0f82bb97cd585844d655',
             'softap-profile.dex': '7ff17f05008e77535dacac13c5c2f216c664bc26403d6cbfe7da7fb9b7c04017',
-            'softap_native_config.sh': '7488253f5f93718f196033aed6ed8b6ead27b300fd2b0a07c6318b64cb73dfca',
+            'softap_native_config.sh': 'c1a0024f795f800eea6ac7566f6aeb0f159cb4082b73fac2e5be92927eaff0ba',
             'native-tether.dex': '71c2ff994fcc2f2ede23eeb361b9d153d9a72c00240ad90c677deb23827fea56',
         }.items():
             hashes[str(task / name)] = digest

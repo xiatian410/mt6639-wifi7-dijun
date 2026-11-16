@@ -51,6 +51,8 @@ class ModelTest {
         cell_data=1
         session_owns_6g=1
         pref_width=80
+        ssid_status_rc=0
+        ssid_hex=
         end=1
     """.trimIndent()
 
@@ -180,6 +182,68 @@ class ModelTest {
         val command = Commands.setKey("it's a \$(touch x); `id` 'secret'")
         assertTrue(Regex("^echo [0-9a-f]+ \\| sh /data/adb/modules/mt6639-hotspot/bin/radio-key\\.sh /data/adb/modules/mt6639-hotspot set$").matches(command))
         assertFalse("secret" in command)
+    }
+
+    @Test
+    fun networkNameUsesUtf8BytesAndRejectsControlsAndBrokenSurrogates() {
+        for (valid in listOf("a", " ", "x".repeat(32), "中".repeat(10) + "ab", "😀".repeat(8))) {
+            assertNull(ssidProblem(valid), valid)
+            assertEquals(valid, decodeSsidHex(ssidHex(valid)))
+        }
+        for (invalid in listOf("", "x".repeat(33), "中".repeat(11), "😀".repeat(8) + "a",
+            "a\u0000b", "a\nb", "a\rb", "a\tb", "a\u007fb", "a\u0085b", "a\u009fb",
+            "a b", "a b", "\uD800", "\uDC00", "\uD800x", "\uDC00\uD800")) {
+            assertNotNull(ssidProblem(invalid))
+            assertFailsWith<IllegalArgumentException> { Commands.setName(invalid) }
+        }
+        assertEquals("e4b8adf09f9880", ssidHex("中😀"))
+    }
+
+    @Test
+    fun networkNameShellMetacharactersAreOnlyHex() {
+        val name = "中 '\";\$(id)`id`\\|&<>"
+        val command = Commands.setName(name)
+        assertEquals("echo ${ssidHex(name)} | sh /data/adb/modules/mt6639-hotspot/bin/radio-name.sh /data/adb/modules/mt6639-hotspot set", command)
+        assertTrue(Regex("^echo [0-9a-f]+ \\| sh /data/adb/modules/mt6639-hotspot/bin/radio-name\\.sh /data/adb/modules/mt6639-hotspot set$").matches(command))
+        assertFalse("id" in command.substringBefore(" | "))
+    }
+
+    @Test
+    fun statusDecodesNamesStrictlyAndKeepsDefaultWidthBehavior() {
+        val custom = full.replace("ssid_hex=", "ssid_hex=${ssidHex("中文😀 =;'")}")
+        val s = assertNotNull(parseStatus(custom))
+        assertEquals("中文😀 =;'", s.customSsid)
+        assertEquals(s.customSsid, s.ssid)
+        assertEquals(s.ssid, s.copy(hotspotState = HotspotState.Idle, prefWidth = 320).ssid)
+        val default = assertNotNull(parseStatus(full))
+        assertNull(default.customSsid)
+        assertEquals("MT6639-Native-6g-80", default.copy(hotspotState = HotspotState.Idle).ssid)
+        assertEquals(default.ssid, assertNotNull(parseStatus(full.replace("ssid_hex=\n", "").replace("ssid_status_rc=0\n", ""))).ssid)
+        assertNull(parseStatus(full.replace("ssid_hex=\n", "")))
+        for (rc in listOf("65", "66", "77", "unknown")) {
+            assertNull(parseStatus(full.replace("ssid_status_rc=0", "ssid_status_rc=$rc")))
+            assertNull(parseStatus(full.replace("ssid_status_rc=0", "ssid_status_rc=$rc").replace("ssid_hex=\n", "")))
+        }
+        for (bad in listOf("0", "gg", "AA", "ff", "c080", "eda080", "f4908080", "e4b8", "610a", "00", "c285", "61".repeat(33))) {
+            assertNull(decodeSsidHex(bad), bad)
+            assertNull(parseStatus(full.replace("ssid_hex=", "ssid_hex=$bad")), bad)
+        }
+        assertNull(default.withKnown(s).customSsid, "an explicit default must clear the previous custom name")
+    }
+
+    @Test
+    fun nameEditingRequiresLoadedIdleAndNoOperation() {
+        val status = assertNotNull(parseStatus(full)).copy(hotspotState = HotspotState.Idle)
+        val idle = ConsoleState(demo = true, loaded = true, status = status)
+        assertTrue(Presentation.nameEnabled(idle))
+        assertFalse(Presentation.nameEnabled(idle.copy(loaded = false)))
+        assertFalse(Presentation.nameEnabled(idle.copy(status = null)))
+        assertFalse(Presentation.nameEnabled(idle.copy(status = status.copy(busy = true))))
+        for (state in HotspotState.entries.filter { it != HotspotState.Idle }) {
+            assertFalse(Presentation.nameEnabled(idle.copy(status = status.copy(hotspotState = state))))
+        }
+        for (kind in OpKind.entries) assertFalse(Presentation.nameEnabled(idle.copy(op = RunningOp(kind, ""))))
+        assertTrue("下次开启生效" in Presentation.nameSummary(idle))
     }
 
     @Test

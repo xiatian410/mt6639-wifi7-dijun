@@ -27,6 +27,7 @@ object Messages {
         OpKind.SixRefresh -> "正在重新注册 6GHz"
         OpKind.SetWidth -> "正在保存带宽"
         OpKind.SetKey -> "正在保存密码"
+        OpKind.SetName -> "正在保存网络名称"
     }
 
     fun failureTitle(kind: OpKind): String = when (kind) {
@@ -37,6 +38,7 @@ object Messages {
         OpKind.SixRefresh -> "重新注册没有完成"
         OpKind.SetWidth -> "带宽没有保存"
         OpKind.SetKey -> "密码没有保存"
+        OpKind.SetName -> "网络名称没有保存"
     }
 
     /** Every reason this table knows. A repository test checks it against the scripts. */
@@ -113,6 +115,12 @@ object Messages {
         "usage_rejected" to "控制脚本不认识这条命令。控制台和脚本可能不是同一个版本，请重新安装本模块。",
         "no_result" to "操作结束了，但脚本没有给出结果。",
         "no_exit" to "等了很久也没有等到操作结束。状态已重新读取，请以页面显示为准。",
+
+        // Network-name installer.
+        "name_encoding_invalid" to "网络名称需要 1 到 32 个 UTF-8 字节，不能包含控制字符、换行或无效字符。",
+        "name_directory_invalid" to "网络名称配置目录的归属或权限不正确。请重新安装本模块。",
+        "name_file_invalid" to "网络名称配置文件不安全或无效。请重新安装本模块。",
+        "name_unwritable" to "无法保存网络名称配置。",
 
         // Passphrase installer.
         "key_input_missing" to "脚本没有收到密码。",

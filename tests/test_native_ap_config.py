@@ -31,6 +31,35 @@ class NativeApConfigTests(unittest.TestCase):
                     self.assertEqual(check.returncode, 0, check.stderr)
                     self.assertNotIn('fixture-only-password', check.stdout + check.stderr)
 
+    def test_custom_ssid_is_hex_only_and_checked_exactly(self):
+        name = '热点 "\'`;$(false)\\#='
+        encoded = name.encode().hex()
+        (self.task / 'ap.ssid.hex').write_text(encoded + '\n')
+        for band, width in [('2g', 20), ('5g', 80), ('6g', 320)]:
+            with self.subTest(band=band, width=width):
+                result = self.run_tool('render', band, width)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f'ssid2={encoded}\n', result.stdout)
+                self.assertNotIn('ssid=', result.stdout)
+                self.assertNotIn(name, result.stdout)
+                (self.task / 'ap.conf').write_text(result.stdout)
+                self.assertEqual(self.run_tool('check', band, width).returncode, 0)
+                for altered in [result.stdout + 'ssid=unexpected\n',
+                                result.stdout.replace(encoded, '6162')]:
+                    (self.task / 'ap.conf').write_text(altered)
+                    self.assertEqual(self.run_tool('check', band, width).returncode, 69)
+
+    def test_custom_ssid_invalid_file_is_not_silently_defaulted(self):
+        name = self.task / 'ap.ssid.hex'
+        for value in ['', '00', '61\n62\n', 'f4908080', '61' * 33, 'not-hex']:
+            name.write_text(value)
+            result = self.run_tool('render')
+            self.assertIn(result.returncode, (65, 66))
+            self.assertEqual(result.stdout, '')
+        name.unlink()
+        name.symlink_to(self.task / 'missing')
+        self.assertEqual(self.run_tool('render').returncode, 66)
+
     def test_2ghz_profile_is_he_only(self):
         rendered = self.run_tool('render', '2g', 20).stdout
         self.assertIn('hw_mode=g\n', rendered)

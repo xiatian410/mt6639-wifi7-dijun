@@ -257,6 +257,7 @@ discard_staged_task() {
     fi
     [ ! -e "$task/guardian.pid" ] && [ ! -e "$task/native.pid" ] || return 73
     rm -f "$task/softap_native_once.sh" "$task/softap_native_config.sh" \
+        "$task/ssid_hex.sh" "$task/ap.ssid.hex" \
         "$task/hostapd" "$task/hostapd_cli" "$task/delete_ifindex" \
         "$task/native-tether.dex" "$task/softap-profile.dex" \
         "$task/twt_recover.sh" "$task/hotspot-identity.sh" "$task/hotspot-upstream.sh" \
@@ -267,7 +268,7 @@ discard_staged_task() {
 
 stage_native_task() {
     task=$1 upstream_key=$2
-    for f in softap_native_once.sh softap_native_config.sh hostapd hostapd_cli \
+    for f in softap_native_once.sh softap_native_config.sh ssid_hex.sh hostapd hostapd_cli \
         delete_ifindex native-tether.dex softap-profile.dex twt_recover.sh \
         hotspot-identity.sh hotspot-upstream.sh compat.sh compatibility.conf; do
         cp "$MODDIR/bin/$f" "$task/$f" || {
@@ -279,6 +280,18 @@ stage_native_task() {
             printf 'private_stage_failed\n' > "$task/.stage-error"
             return 70
         }
+    # Capture a validated preference once. Later edits affect only new tasks.
+    if [ -e "$PRIVATE/ap.ssid.hex" ] || [ -L "$PRIVATE/ap.ssid.hex" ]; then
+        p=$PRIVATE/ap.ssid.hex
+        if ! { [ -f "$p" ] && [ ! -L "$p" ] &&
+            [ "$(stat -c %u "$p")" = 0 ] && [ "$(stat -c %a "$p")" = 600 ] &&
+            [ "$(stat -c %s "$p")" -le 65 ] &&
+            sh "$task/ssid_hex.sh" < "$p" > "$task/ap.ssid.hex" &&
+            chmod 0600 "$task/ap.ssid.hex"; }; then
+            printf 'name_stage_failed\n' > "$task/.stage-error"
+            return 65
+        fi
+    fi
     if [ "$upstream_key" != none ]; then
         cp "$PRIVATE/$upstream_key" "$task/$upstream_key" || {
             printf 'private_stage_failed\n' > "$task/.stage-error"

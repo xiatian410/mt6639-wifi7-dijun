@@ -240,7 +240,7 @@ private fun HotspotCard(state: ConsoleState, controller: ConsoleController) {
             enabled = Presentation.hotspotEnabled(state),
         )
         val op = state.op
-        AnimatedVisibility(visible = op != null && op.kind != OpKind.SetWidth && op.kind != OpKind.SetKey) {
+        AnimatedVisibility(visible = op != null && op.kind !in listOf(OpKind.SetWidth, OpKind.SetKey, OpKind.SetName)) {
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
@@ -265,8 +265,23 @@ private fun SettingsCard(
     controller: ConsoleController,
     onAskKey: () -> Unit,
 ) {
+    var askName by remember { mutableStateOf(false) }
+    NameDialog(
+        show = askName,
+        initialName = status.ssid,
+        enabled = Presentation.nameEnabled(state),
+        onDismiss = { askName = false },
+        onSave = {
+            if (controller.saveName(it) != null) askName = false
+        },
+    )
     Section(title = "热点设置") {
-        BasicComponent(title = "网络名称", summary = status.ssid)
+        ArrowPreference(
+            title = "网络名称",
+            summary = Presentation.nameSummary(state),
+            onClick = { askName = true },
+            enabled = Presentation.nameEnabled(state),
+        )
         OverlayDropdownPreference(
             title = "带宽",
             summary = "越宽上限越高，也越依赖客户端和周围环境",
@@ -373,6 +388,48 @@ private fun DialogButtons(
             enabled = confirmEnabled,
             colors = ButtonDefaults.textButtonColorsPrimary(),
         )
+    }
+}
+
+@Composable
+private fun NameDialog(
+    show: Boolean,
+    initialName: String,
+    enabled: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var text by remember(show) { mutableStateOf(initialName) }
+    val problem = ssidProblem(text)
+    OverlayDialog(
+        show = show,
+        title = "设置网络名称",
+        summary = "需先关闭热点再修改，下次开启生效。支持中文和表情，共 1 到 32 个 UTF-8 字节，不能包含控制字符或换行。",
+        onDismissRequest = onDismiss,
+    ) {
+        Column {
+            TextField(
+                value = text,
+                onValueChange = { text = it },
+                label = "网络名称",
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = if (!enabled) "当前状态不允许修改，请先关闭热点并等待操作结束" else
+                    problem ?: "${text.encodeToByteArray().size} / 32 字节 · 可以保存",
+                style = MiuixTheme.textStyles.footnote1,
+                color = if (enabled && problem == null) OkColor else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.padding(top = 10.dp, bottom = 16.dp),
+            )
+            DialogButtons(
+                cancel = "取消",
+                confirm = "保存",
+                confirmEnabled = enabled && problem == null,
+                onCancel = onDismiss,
+                onConfirm = { onSave(text) },
+            )
+        }
     }
 }
 

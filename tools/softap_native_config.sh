@@ -55,12 +55,19 @@ fi
 # Limit to printable ASCII and 8..63 bytes for this diagnostic profile.
 LC_ALL=C awk 'NR != 1 || length($0) < 8 || length($0) > 63 || $0 ~ /[^ -~]/ { bad=1 } END { exit bad || NR != 1 }' "$D/ap.key" || exit 65
 KEY=$(cat "$D/ap.key")
+SSID_LINE="ssid=MT6639-Native-$BAND-$WIDTH"
+if [ -e "$D/ap.ssid.hex" ] || [ -L "$D/ap.ssid.hex" ]; then
+    [ -f "$D/ap.ssid.hex" ] && [ ! -L "$D/ap.ssid.hex" ] &&
+        [ "$(stat -c %s "$D/ap.ssid.hex")" -le 65 ] || exit 66
+    SSID_HEX=$(sh "$(dirname "$0")/ssid_hex.sh" < "$D/ap.ssid.hex") || exit 65
+    SSID_LINE="ssid2=$SSID_HEX"
+fi
 emit() {
     cat <<EOF
 interface=mtap0
 driver=nl80211
 ctrl_interface=$D/ctrl
-ssid=MT6639-Native-$BAND-$WIDTH
+$SSID_LINE
 hw_mode=$HW_MODE
 op_class=$CLASS
 channel=$CHANNEL

@@ -551,7 +551,13 @@ for file in "$PROFILE" "$D/ap.key" "$D/ap.conf"; do
     [ -f "$file" ] && [ ! -L "$file" ] && [ "$(stat -c %u "$file")" = 0 ] || exit 77
 done
 hash=$(sha256sum "$PROFILE") || exit 69
-[ "${hash%% *}" = 7488253f5f93718f196033aed6ed8b6ead27b300fd2b0a07c6318b64cb73dfca ] || exit 69
+[ "${hash%% *}" = c1a0024f795f800eea6ac7566f6aeb0f159cb4082b73fac2e5be92927eaff0ba ] || exit 69
+if [ -e "$D/ap.ssid.hex" ] || [ -L "$D/ap.ssid.hex" ]; then
+    [ -f "$D/ssid_hex.sh" ] && [ ! -L "$D/ssid_hex.sh" ] &&
+        [ "$(stat -c %u "$D/ssid_hex.sh")" = 0 ] || exit 77
+    hash=$(sha256sum "$D/ssid_hex.sh") || exit 69
+    [ "${hash%% *}" = 206c8349bc7891f539d74ba17f3cd5ea2a479b0539f02727bed642501891232d ] || exit 69
+fi
 sh "$PROFILE" "$D" check "$BAND" "$WIDTH" > "$D/profile.check" 2>&1 || exit 69
 case "$BAND:$WIDTH" in
     5g:160)

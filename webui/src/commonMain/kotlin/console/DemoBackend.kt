@@ -21,6 +21,7 @@ class DemoBackend(
     private var hotspot = "idle"
     private var width = 20
     private var prefWidth = 20
+    private var nameHex = ""
     private var apKey = false
     private var staFreq: Int? = null
     private var cellData = true
@@ -44,6 +45,21 @@ class DemoBackend(
             delay(stepMs / 3)
             onLine(true, "sh: ${Commands.MODULE}/bin/radio-control.sh: No such file or directory")
             return 127
+        }
+        if (command.endsWith(Commands.SET_NAME_SUFFIX)) {
+            delay(stepMs / 2)
+            val hex = command.removePrefix("echo ").removeSuffix(Commands.SET_NAME_SUFFIX)
+            if (decodeSsidHex(hex) == null) {
+                onLine(true, "REJECT name_encoding_invalid")
+                return 65
+            }
+            if (hotspot != "idle") {
+                onLine(true, "REJECT hotspot_not_idle")
+                return 73
+            }
+            nameHex = hex
+            onLine(false, "ssid_hex=$nameHex")
+            return 0
         }
         if (command.endsWith(Commands.SET_KEY_SUFFIX)) {
             delay(stepMs / 2)
@@ -234,6 +250,8 @@ class DemoBackend(
         out("cell_data=${if (staFreq == null) (if (cellData) "1" else "0") else "na"}")
         out("session_owns_6g=${if (owns) 1 else 0}")
         out("pref_width=$prefWidth")
+        out("ssid_status_rc=0")
+        out("ssid_hex=$nameHex")
         out("end=1")
     }
 }

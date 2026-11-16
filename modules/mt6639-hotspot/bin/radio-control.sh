@@ -764,6 +764,11 @@ op_status() {
 
     if [ "$(getenforce 2>/dev/null)" = Enforcing ]; then echo enforcing=1; else echo enforcing=0; fi
     if key_ok; then echo ap_key=1; else echo ap_key=0; fi
+    # This is the saved next-start preference, not a claim about the live AP.
+    name_status=$(sh "$HOTSPOT/bin/radio-name.sh" "$HOTSPOT" status 8>&- 2>/dev/null)
+    name_rc=$?
+    echo "ssid_status_rc=$name_rc"
+    [ "$name_rc" != 0 ] || printf '%s\n' "$name_status"
     if [ "$mode" = full ]; then
         if sh "$HOTSPOT/bin/verify-module.sh" "$HOTSPOT" 8>&- >/dev/null 2>&1; then
             echo integrity=1

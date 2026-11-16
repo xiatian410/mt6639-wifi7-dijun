@@ -38,7 +38,12 @@
         -webkit-tap-highlight-color: transparent;
         overscroll-behavior: none;
       }
-      #composeApp { position: fixed; inset: 0; }
+      /* Compose owns scrolling inside its canvas. Without this, Chromium can
+         claim a vertical pan for the non-scrollable document and cancel the
+         pointer stream before LazyColumn receives the drag. Scope it to the
+         canvas surface so the native input fallback keeps browser gestures. */
+      #composeApp { position: fixed; inset: 0; touch-action: none; }
+      #composeApp canvas { touch-action: none; }
       #loading, #fatal {
         position: fixed;
         inset: 0;

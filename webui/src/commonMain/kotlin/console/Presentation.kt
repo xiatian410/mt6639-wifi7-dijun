@@ -56,6 +56,14 @@ object Presentation {
         return state.op == null && !s.busy && s.hotspotState == HotspotState.Idle
     }
 
+    fun nameEnabled(state: ConsoleState): Boolean = state.loaded && widthEnabled(state)
+
+    fun nameSummary(state: ConsoleState): String {
+        val name = state.status?.ssid ?: "状态未知"
+        return if (state.op?.kind == OpKind.SetName) "$name · 正在保存名称" else
+            "$name · 需先关闭热点再修改，下次开启生效"
+    }
+
     fun keyEnabled(state: ConsoleState): Boolean = state.op == null && state.status != null
 
     fun keySummary(s: RadioStatus): String =

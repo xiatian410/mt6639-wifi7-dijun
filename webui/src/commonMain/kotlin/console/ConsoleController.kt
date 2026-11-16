@@ -20,7 +20,7 @@ interface Backend {
     suspend fun run(command: String, onLine: (stderr: Boolean, text: String) -> Unit): Int
 }
 
-enum class OpKind { Start, Stop, SixOn, SixOff, SixRefresh, SetWidth, SetKey }
+enum class OpKind { Start, Stop, SixOn, SixOff, SixRefresh, SetWidth, SetKey, SetName }
 
 /** An operation in progress and the step the script last announced. */
 data class RunningOp(val kind: OpKind, val phase: String)
@@ -81,6 +81,12 @@ class ConsoleController(
         return operate(OpKind.SetKey, Commands.setKey(passphrase))
     }
 
+    /** Names apply on the next start, and must never be edited during a session. */
+    fun saveName(name: String): Job? {
+        if (ssidProblem(name) != null || !Presentation.nameEnabled(_state.value)) return null
+        return operate(OpKind.SetName, Commands.setName(name))
+    }
+
     fun dismissNotice() = _state.update { it.copy(notice = null) }
 
     fun openLogs(): Job? {
@@ -124,6 +130,11 @@ class ConsoleController(
         return scope.launch {
             val lines = ArrayList<String>()
             val code = gate.withLock {
+                // A refresh queued before this save may have discovered a running hotspot.
+                if (kind == OpKind.SetName && !Presentation.nameEnabled(_state.value.copy(op = null))) {
+                    lines += "REJECT hotspot_not_idle"
+                    return@withLock 73
+                }
                 withTimeoutOrNull(opTimeoutMs) {
                     backend.run(command) { stderr, text ->
                         lines += text

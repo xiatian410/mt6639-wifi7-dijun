@@ -31,5 +31,9 @@ object Commands {
         return "$CONTROL set-width $width"
     }
 
+    const val SET_NAME_SUFFIX = " | sh $MODULE/bin/radio-name.sh $MODULE set"
+
+    fun setName(name: String): String = "echo ${ssidHex(name)}$SET_NAME_SUFFIX"
+
     fun setKey(passphrase: String): String = "echo ${passphraseHex(passphrase)}$SET_KEY_SUFFIX"
 }
