@@ -33,6 +33,15 @@ extern int fchmod(int, mode_t);
 #define CLONE_TREE 1
 #define MOVE_F_EMPTY 4
 #define LIMIT 131072
+/* Lifecycle guard only: production transactions retain the legacy path/schema
+ * so the unified module can restore existing journals. No runtime override. */
+#if defined(MT_UNIFIED_MODULE) && defined(MT_MOUNT_TXN_TEST)
+#error Unified_and_test_profiles_are_mutually_exclusive
+#elif defined(MT_UNIFIED_MODULE)
+#define MODULE_NAME "mt6639-hotspot"
+#else
+#define MODULE_NAME "mt6639-6g"
+#endif
 #ifdef MT_MOUNT_TXN_TEST
 #define PREFIX "/data/local/tmp/mt6639-native-"
 #define SCHEMA "MT6639-TEST-v3"
@@ -425,9 +434,43 @@ static int marker_write(struct tx *t, const char *name, const char *text) {
     if (close(fd)) ok = 0;
     return ok;
 }
-/* Called only AFTER mount recovery succeeds. A foreign overlay must block all
- * radio changes, rather than rebuilding against somebody else's config. */
-static int recover(struct tx *t) {
+#ifdef MT_UNIFIED_MODULE
+static int module_open(struct tx *t);
+/* Stop first, then lock out new AP starts and recheck idle UNDER that lock.
+ * Return the pinned action.lock FD; the caller holds it across all restoration.
+ * The fixed helper verifies module integrity. Failures leave authority intact. */
+static int unified_recovery_barrier(struct tx *t) {
+    char output[4096]; struct id before, after; struct stat s;
+    int module = -1, current = -1, work = -1, lock = -1;
+    char *const stop_argv[] = {"/system/bin/sh",
+        "/data/adb/modules/mt6639-hotspot/bin/radio-teardown.sh", NULL};
+    char *const check_argv[] = {"/system/bin/sh",
+        "/data/adb/modules/mt6639-hotspot/bin/radio-teardown.sh", "check", NULL};
+    module = module_open(t);
+    if (module < 0 || !identity(module, "", &before) ||
+        (t->persistent && !equal(&before, &t->module)) ||
+        mt_command(stop_argv, 400000, output, sizeof output) != 0) goto bad;
+    work = directory("/data/adb/mt6639-hotspot");
+    if (!private_dir(work)) goto bad;
+    lock = openat(work, "action.lock", O_RDWR | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK);
+    if (!safe_file(lock) || fstat(lock, &s) || s.st_size || flock(lock, LOCK_EX | LOCK_NB)) goto bad;
+    current = module_open(t);
+    if (current < 0 || !identity(current, "", &after) || !equal(&before, &after) ||
+        mt_command(check_argv, 400000, output, sizeof output) != 0) goto bad;
+    close(current); current = module_open(t);
+    if (current < 0 || !identity(current, "", &after) || !equal(&before, &after)) goto bad;
+    close(current); close(module); close(work); return lock;
+bad:
+    if (current >= 0) close(current);
+    if (module >= 0) close(module);
+    if (work >= 0) close(work);
+    if (lock >= 0) close(lock);
+    return -1;
+}
+#endif
+/* WLAN restoration runs only AFTER mount recovery succeeds. A foreign overlay
+ * must block WLAN restoration against somebody else's config. */
+static int recover_after_barrier(struct tx *t) {
     int rc = recover_mount(t), intent, done, netdone, ok, scan, wifi;
     if ((rc != 0 && rc != 5) || !t->r.wlan) return rc;
     intent = marker_state(t, "wlan-intent", "intent\n");
@@ -460,6 +503,18 @@ static int recover(struct tx *t) {
         return marker_write(t, "wlan-net-ready", "ready\n") ? rc : 6;
     }
     return rc == 0 || rc == 5 ? 7 : rc;
+}
+/* Both explicit recovery and guardian exit enter here. Never release the AP
+ * action lock between idle verification and the final restoration result. */
+static int recover(struct tx *t) {
+#ifdef MT_UNIFIED_MODULE
+    int lock = unified_recovery_barrier(t), rc;
+    if (lock < 0) return 4; /* blocked; retain all journals */
+    rc = recover_after_barrier(t);
+    close(lock); return rc;
+#else
+    return recover_after_barrier(t);
+#endif
 }
 static int candidate(struct tx *t) {
     static char bytes[LIMIT]; const char *old = "DisallowBand6G 1";
@@ -556,7 +611,7 @@ static int module_below(int barrier) {
     if (fstat(modules, &s) || !S_ISDIR(s.st_mode) || s.st_uid) {
         close(modules); return -1;
     }
-    fd = openat(modules, "mt6639-6g", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    fd = openat(modules, MODULE_NAME, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) { missing = errno == ENOENT; close(modules); return missing ? -2 : -1; }
     close(modules);
     if (fstat(fd, &s) || !S_ISDIR(s.st_mode) || s.st_uid || (s.st_mode & 0022)) {

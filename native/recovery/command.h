@@ -164,7 +164,16 @@ static void mt_cmd_child_error(int fd) {
  * auto-reap/external waiters invalidate the unreaped-PID ownership contract. */
 static MT_CMD_UNUSED int mt_command_n(char *const argv[], int budget_ms, char *out, size_t cap, size_t *written) {
     if (written) *written = 0;
-    if (!argv || !argv[0] || !out || cap < 2 || budget_ms < 1 || budget_ms > 20000) {
+    int budget_valid = budget_ms >= 1 && budget_ms <= 20000;
+#ifdef MT_UNIFIED_MODULE
+    /* Only the fixed AP teardown barrier needs a longer bounded subprocess.
+     * Keep every other command, and standalone/test builds, capped at 20s. */
+    if (budget_ms == 400000 && argv && argv[0] && argv[1] &&
+        !strcmp(argv[0], "/system/bin/sh") &&
+        !strcmp(argv[1], "/data/adb/modules/mt6639-hotspot/bin/radio-teardown.sh") &&
+        (!argv[2] || (!strcmp(argv[2], "check") && !argv[3]))) budget_valid = 1;
+#endif
+    if (!argv || !argv[0] || !out || cap < 2 || !budget_valid) {
         if (out && cap > 0) out[0] = '\0';
         return 126;
     }

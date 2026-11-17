@@ -2,13 +2,14 @@
 # Serialize module UI/service operations; native ownership checks remain final.
 set -u
 MODDIR=${1:-/data/adb/modules/mt6639-6g}
-. "$MODDIR/bin/lib.sh"
+. "$MODDIR/bin/owner.sh"
 operation=${2:-status}
 case "$operation" in
     status) exec sh "$MODDIR/bin/native.sh" "$MODDIR" status ;;
-    enable|disable|toggle|refresh) ;;
+    enable|disable|toggle|refresh) require_owner_mutation || exit 3 ;;
     *) echo 'usage: control.sh MODDIR status|enable|disable|toggle|refresh' >&2; exit 64 ;;
 esac
+. "$MODDIR/bin/lib.sh"
 [ "$(id -u)" = 0 ] || { log 'REJECT control_not_root'; exit 3; }
 umask 077
 exec 9>"$WORK/control.lock" || exit 3
@@ -24,21 +25,24 @@ if [ "$operation" = toggle ]; then
         operation=enable
     fi
 fi
+# Embedded restore may wait600s for the guardian, then run checked recovery
+# (including a second400s AP barrier). Preserve standalone180s and leave a
+# bounded margin below the owner's outer1320s controller budget.
+mutation_timeout=180
+[ "$MODULE_EMBEDDED" != 1 ] || mutation_timeout=1260
 case "$operation" in
     refresh)
         timeout 90 sh "$MODDIR/bin/refresh-6g.sh" "$MODDIR" 9>&-
         ;;
     enable)
-        if [ -e "$MODDIR/disable" ] || [ -e "$MODDIR/remove" ]; then
-            log 'REJECT module_disabled_or_removing'; exit 3
-        fi
+        require_owner_enabled || exit 3
         echo '启用 6GHz 事务（默认持续模式）；操作按钮可恢复。'
         # The detached guardian must not retain the management lock fd.
-        ENABLE_6G=1 timeout 180 sh "$MODDIR/bin/native.sh" "$MODDIR" apply 9>&-
+        ENABLE_6G=1 timeout "$mutation_timeout" sh "$MODDIR/bin/native.sh" "$MODDIR" apply 9>&-
         ;;
     disable)
         echo '恢复当前事务；下次 KernelSU service 仍按 config.conf 的默认值执行。'
-        timeout 180 sh "$MODDIR/bin/native.sh" "$MODDIR" restore 9>&-
+        timeout "$mutation_timeout" sh "$MODDIR/bin/native.sh" "$MODDIR" restore 9>&-
         ;;
 esac
 rc=$?

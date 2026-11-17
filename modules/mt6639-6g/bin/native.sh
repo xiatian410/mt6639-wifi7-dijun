@@ -4,6 +4,13 @@
 # entrypoints are control.sh, apply.sh, restore.sh and the KSU lifecycle scripts.
 set -u
 MODDIR=${1:-${MODDIR:-/data/adb/modules/mt6639-6g}}
+. "$MODDIR/bin/owner.sh"
+case "${2:-}" in
+    apply|restore) require_owner_mutation || exit 3 ;;
+esac
+if [ "$MODULE_EMBEDDED" = 1 ] && [ "${2:-}" = apply ]; then
+    require_owner_enabled || exit 3
+fi
 . "$MODDIR/bin/lib.sh"
 
 TXN_ROOT=$WORK/transactions
@@ -14,7 +21,12 @@ need_native() {
     [ -f "$NATIVE" ] || die 3 "REJECT native_missing"
     # KernelSU extraction normalizes packaged files to 0644. Repair only this
     # module-owned executable; an unreadable or wrong image still fails.
-    [ -x "$NATIVE" ] || chmod 0755 "$NATIVE" || die 3 "REJECT native_not_executable"
+    if [ ! -x "$NATIVE" ]; then
+        # Even observational entrypoints must guard a permission repair in the
+        # unified install; a stale install may be inspected, not mutated.
+        require_owner_mutation || die 3 "REJECT owner_mutation_blocked"
+        chmod 0755 "$NATIVE" || die 3 "REJECT native_not_executable"
+    fi
 }
 
 active_tx() {
@@ -222,7 +234,11 @@ cmd_apply() {
 wait_terminal() {
     tx=$1
     i=0
-    while [ "$i" -lt 100 ]; do
+    terminal_wait=100
+    # A unified guardian must finish the bounded AP barrier before restoring
+    # WLAN; do not report it stuck after the standalone100s grace period.
+    [ "$MODULE_EMBEDDED" != 1 ] || terminal_wait=600
+    while [ "$i" -lt "$terminal_wait" ]; do
         grep -q '"event":"terminal"' "$tx/guardian.log" 2>/dev/null && return 0
         guardian_alive "$tx" || return 1
         sleep 1

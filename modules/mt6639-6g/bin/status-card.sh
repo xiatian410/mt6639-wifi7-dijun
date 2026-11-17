@@ -6,9 +6,14 @@ MODDIR=${1:-/data/adb/modules/mt6639-6g}
 MODE=${2:-show}
 case "$MODE" in show|update) ;; *) exit 64 ;; esac
 . "$MODDIR/bin/lib.sh"
+# Embedded six has no module identity/card of its own. Only the owner renders
+# module.prop; keep show available as a summary without requiring six metadata.
+if [ "$MODULE_EMBEDDED" = 1 ] && [ "$MODE" = update ]; then exit 0; fi
 TEMPLATE=$MODDIR/module.prop.template
-[ -f "$TEMPLATE" ] && [ ! -L "$TEMPLATE" ] || exit 3
-[ -f "$MODDIR/module.prop" ] && [ ! -L "$MODDIR/module.prop" ] || exit 3
+if [ "$MODULE_EMBEDDED" != 1 ]; then
+    [ -f "$TEMPLATE" ] && [ ! -L "$TEMPLATE" ] || exit 3
+    [ -f "$MODDIR/module.prop" ] && [ ! -L "$MODDIR/module.prop" ] || exit 3
+fi
 
 now_boot=$(boot_id)
 [ -n "$now_boot" ] || exit 3
@@ -89,8 +94,8 @@ fi
 [ "$driver" != 不可读 ] || headline=驱动不可读
 [ "$kernel" = 匹配 ] || headline=内核不匹配
 [ "$COMPAT_ERROR" != compatibility_table_invalid ] || headline=兼容表无效
-if [ -e "$MODDIR/disable" ]; then headline=模块已禁用; fi
-if [ -e "$MODDIR/remove" ]; then headline=模块待移除; fi
+if [ -e "$MODULE_OWNER/disable" ] || [ -L "$MODULE_OWNER/disable" ]; then headline=模块已禁用; fi
+if [ -e "$MODULE_OWNER/remove" ] || [ -L "$MODULE_OWNER/remove" ]; then headline=模块待移除; fi
 
 # Restrict the observation to a managed interface and its own PHY. Never
 # mistake an unrelated USB adapter's 6GHz channels for the MT6639 radio.

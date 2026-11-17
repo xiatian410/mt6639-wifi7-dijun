@@ -3,6 +3,8 @@
 # 幂等：没有挂载时也安全返回，可重复执行。
 set -u
 MODDIR=${1:-${MODDIR:-/data/adb/modules/mt6639-6g}}
+. "$MODDIR/bin/owner.sh"
+require_owner_mutation || exit 3
 . "$MODDIR/bin/lib.sh"
 
 if [ "${NATIVE_EXECUTOR:-1}" = 1 ]; then

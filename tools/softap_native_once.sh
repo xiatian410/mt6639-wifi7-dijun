@@ -58,7 +58,8 @@ case "$BAND" in
         ;;
 esac
 UPSTREAM_PEER=198.51.100.242
-UPSTREAM_CHECKER=/data/adb/modules/mt6639-6g/bin/post-reboot-check.sh
+SIX=/data/adb/modules/mt6639-hotspot/six
+UPSTREAM_CHECKER=$SIX/bin/post-reboot-check.sh
 GUARDIAN_HOLD_SECONDS=${GUARDIAN_HOLD_SECONDS:-90}
 case "$GUARDIAN_HOLD_SECONDS" in ''|*[!0-9]*) exit 64 ;; esac
 [ "$GUARDIAN_HOLD_SECONDS" -ge 30 ] && [ "$GUARDIAN_HOLD_SECONDS" -le 86400 ] || exit 64
@@ -439,7 +440,7 @@ recover() {
         station_ok=0
         check_attempt=0
         while :; do
-            if sh "$D/twt_recover.sh" check "$check_dir" "$(cat "$D/boot.before")" "$UPSTREAM_SSID" "$UPSTREAM_FREQ" "$UPSTREAM_BSSID" "$UPSTREAM_PEER" "$UPSTREAM_CHECKER" > "$D/network.check" 2>&1; then
+            if sh "$D/twt_recover.sh" check "$check_dir" "$(cat "$D/boot.before")" "$UPSTREAM_SSID" "$UPSTREAM_FREQ" "$UPSTREAM_BSSID" "$UPSTREAM_PEER" "$UPSTREAM_CHECKER" "$SIX" > "$D/network.check" 2>&1; then
                 station_ok=1
                 break
             fi
@@ -454,7 +455,7 @@ recover() {
                 cp "$D/$UPSTREAM_KEY_NAME" "$select_dir/reconnect.key"; then
                 station_state=selection_pending
                 if record_recovery_state &&
-                    sh "$D/twt_recover.sh" select "$select_dir" "$(cat "$D/boot.before")" "$UPSTREAM_SSID" "$UPSTREAM_FREQ" "$UPSTREAM_BSSID" "$UPSTREAM_PEER" "$UPSTREAM_CHECKER" > "$D/network.select" 2>&1; then
+                    sh "$D/twt_recover.sh" select "$select_dir" "$(cat "$D/boot.before")" "$UPSTREAM_SSID" "$UPSTREAM_FREQ" "$UPSTREAM_BSSID" "$UPSTREAM_PEER" "$UPSTREAM_CHECKER" "$SIX" > "$D/network.select" 2>&1; then
                     station_state=selected_and_verified
                 else
                     station_state=selection_failed
@@ -518,6 +519,10 @@ case "$OP" in
     run-tether) ;;
     *) exit 64 ;;
 esac
+# Raw/staged entry points cannot bypass the installed owner's migration gate.
+# The guardian/recovery dispatch above remains available during teardown.
+sh /data/adb/modules/mt6639-hotspot/bin/unified-guard.sh \
+    /data/adb/modules/mt6639-hotspot check || exit $?
 exec 8>"$D/owner.lock"
 flock -n 8 8>&8 || exit 75
 # Holding owner.lock proves no other runner owns this directory, so a leftover

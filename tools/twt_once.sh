@@ -29,7 +29,7 @@ MOD=mttwt_once
 KO_HASH=a68139b1aa1f9e83b241445f41e9d1a142e4826309c8b4301efd82ad2442e61e
 STOCK_HASH=54619c2e9521fc084edd4ec93282715ac10e716ad4ae0a27ec5588fb64e618ea
 BTF_HASH=cff622b3a38fce9b608b7063ab93025118fd2afd8d32b187174d7473751d1be2
-RECOVER_HASH=baaec1e35a868bfc5993191c0e391283b20c2f0fc3f6b269ec718ca5b3dab573
+RECOVER_HASH=7f6b7bab02199645a09f25cebbeeb79d06f31bbf33386eae89d86bf8b63f59cf
 sha() { timeout 5 sha256sum "$1" | awk '{print $1}'; }
 current() { [ "$(timeout 3 cat /proc/sys/kernel/random/boot_id)" = "$BOOT" ]; }
 loaded() {

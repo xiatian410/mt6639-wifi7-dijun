@@ -3,6 +3,9 @@
 # driver/userland generation has no 6GHz channels registered.
 set -u
 MODDIR=${1:-${MODDIR:-/data/adb/modules/mt6639-6g}}
+. "$MODDIR/bin/owner.sh"
+require_owner_mutation || exit 3
+if [ "$MODULE_EMBEDDED" = 1 ]; then require_owner_enabled || exit 3; fi
 . "$MODDIR/bin/lib.sh"
 [ -f "$MODDIR/config.conf" ] && . "$MODDIR/config.conf"
 

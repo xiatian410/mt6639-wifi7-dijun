@@ -44,15 +44,17 @@ await mkdir(outDir, { recursive: true });
 const ksuMock = () => {
   const state = { hotspot: 'idle', width: 20, pref: 80, key: true, six: true, ssidHex: '' };
   const failStart = new URLSearchParams(location.search).get('fail') === 'start';
+  const blocked = new URLSearchParams(location.search).get('migration') === 'blocked';
   window.__commands = [];
   const status = (full) => [
     'schema=mt6639-radio-status-v1', `mode=${full ? 'full' : 'light'}`,
     'boot=11111111-1111-4111-8111-111111111111', 'busy=0', 'six_module=present',
-    'six_version=v0.3.3-dijun.1', 'six_status_rc=0', `six_state=${state.six ? 'active' : 'restored'}`,
+    `unified_ready=${blocked ? 0 : 1}`, `unified_reason=${blocked ? 'unified_reboot_required' : 'none'}`,
+    'six_version=v0.4.0-dijun.1', 'six_status_rc=0', `six_state=${state.six ? 'active' : 'restored'}`,
     `six_tx=${state.six ? 'present' : 'none'}`, `six_guardian=${state.six ? 'alive' : 'none'}`,
-    'six_profile=os4-g284297', 'six_compat_error=none', 'six_boot_default=1', `six_ready=${state.six ? 1 : 0}`,
+    'six_profile=os4-g284297', 'six_compat_error=none', 'six_boot_default=0', `six_ready=${state.six ? 1 : 0}`,
     'six_card=[事务运行] 适配：os4-g284297 | 内核：匹配 | 驱动：匹配 | 配置：临时配置 | 事务：运行 | 6GHz：60个已注册信道 | 连接：未连接 | 更新：12:34:56。信道注册不代表业务通过。',
-    'hotspot_module=present', 'hotspot_version=v0.3.1-dijun.1',
+    'hotspot_module=present', 'hotspot_version=v0.4.0-dijun.1',
     ...(full ? ['hotspot_status_rc=0', `hotspot_state=${state.hotspot}`,
       `hotspot_freq=${state.hotspot === 'active' ? 6135 : 'none'}`,
       `hotspot_channel=${state.hotspot === 'active' ? 37 : 'none'}`] : [`hotspot_state=${state.hotspot}`]),
@@ -126,6 +128,11 @@ const scenarios = {
   missing: { query: '?demo=missing', scheme: 'light' },
   ksu: { query: '', scheme: 'light', ksu: true },
   // Interactions. Coordinates are CSS pixels in the 412x892 phone viewport.
+  ksu_migration: {
+    query: '?migration=blocked', scheme: 'light', ksu: true,
+    steps: [['tap', 359, 141], ['wait', 700], ['shot', 'blocked'],
+      ['neverSent', ' start '], ['neverSent', ' six-on'], ['neverSent', ' six-refresh']],
+  },
   ksu_flow: {
     query: '', scheme: 'light', ksu: true,
     steps: [['tap', 359, 141], ['wait', 900], ['shot', 'running'], ['wait', 3200], ['shot', 'started'],
@@ -142,8 +149,7 @@ const scenarios = {
       ['tap', 200, 740], ['press', 'ControlOrMeta+A'], ['insert', 'Lab 演示'], ['wait', 200],
       ['shot', 'name_valid'], ['tap', 296, 830], ['wait', 1200],
       ['shot', 'name_saved'],
-        ['sentMatch', '4c616220e6bc94e7a4ba'], ['sentMatch', 'radio-name.sh.* set'],
-      ['sentMatch', 'radio-name.sh.* set'],
+      ['sentMatch', '4c616220e6bc94e7a4ba'], ['sentMatch', 'radio-name.sh.* set'],
       ['neverSent', 'Lab 演示'],
     ],
   },

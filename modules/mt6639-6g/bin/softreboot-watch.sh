@@ -20,6 +20,9 @@
 set -u
 MODDIR=${1:-${MODDIR:-/data/adb/modules/mt6639-6g}}
 MODE=${2:-run}
+. "$MODDIR/bin/owner.sh"
+require_owner_mutation || exit 3
+if [ "$MODULE_EMBEDDED" = 1 ]; then require_owner_enabled || exit 3; fi
 . "$MODDIR/bin/lib.sh"
 [ -f "$MODDIR/config.conf" ] && . "$MODDIR/config.conf"
 
@@ -82,6 +85,11 @@ target_registered() {
 }
 
 run_refresh() {
+    if [ "$MODULE_EMBEDDED" = 1 ]; then
+        require_owner_enabled && require_owner_mutation || return 3
+        timeout 200 sh "$MODULE_OWNER/bin/radio-control.sh" "$MODULE_OWNER" six-refresh
+        return $?
+    fi
     if [ "${MT6639_TEST_MODE:-0}" = 1 ] && [ -n "${MT6639_TEST_REFRESH_CMD:-}" ]; then
         sh -c "$MT6639_TEST_REFRESH_CMD"
         return $?
@@ -218,6 +226,12 @@ run_loop() {
     i=0
     while :; do
         i=$((i + 1))
+        if [ "$MODULE_EMBEDDED" = 1 ]; then
+            require_owner_enabled && require_owner_mutation || {
+                log 'softreboot-watch: owner_unavailable; stop'
+                return 3
+            }
+        fi
         boot=$(boot_id 2>/dev/null)
         ss=$(ss_pid)
         if [ -z "$boot" ] || [ -z "$ss" ]; then
@@ -242,7 +256,7 @@ run_loop() {
 
 start_daemon() {
     [ "${ENABLE_6G:-0}" = 1 ] || exit 0
-    [ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ] || exit 0
+    require_owner_enabled || exit 0
     if [ -f "$PID_FILE" ] && [ ! -L "$PID_FILE" ]; then
         old=$(cat "$PID_FILE" 2>/dev/null)
         case "$old" in

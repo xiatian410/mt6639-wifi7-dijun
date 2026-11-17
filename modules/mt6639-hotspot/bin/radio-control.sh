@@ -1,9 +1,9 @@
 #!/system/bin/sh
-# One controller for both MT6639 radio layers: the 6GHz registration owned by
-# mt6639-6g and the native 6GHz hotspot owned by this module.
+# One controller for both MT6639 radio layers owned by mt6639-hotspot:
+# embedded six/ registration and the native 6GHz hotspot.
 #
-# It never changes the radio itself. Every change goes through the two
-# modules' own serialized entry points and their checks stay final. This file
+# It never changes the radio itself. Every change goes through the layers'
+# serialized entry points and their checks stay final. This file
 # only orders them, refuses early when a start is already known to fail, and
 # returns 6GHz to stock when it was the one that enabled it.
 set -u
@@ -12,7 +12,7 @@ umask 077
 HOTSPOT=${1:-/data/adb/modules/mt6639-hotspot}
 OP=${2:-status}
 ARG=${3:-}
-SIX=/data/adb/modules/mt6639-6g
+SIX=$HOTSPOT/six
 HOTSPOT_WORK=/data/adb/mt6639-hotspot
 RADIO_WORK=/data/adb/mt6639-radio
 RADIO_RECORD=$RADIO_WORK/session
@@ -41,6 +41,26 @@ esac
 if [ -f "$HOTSPOT/bin/android-env.sh" ] && [ ! -L "$HOTSPOT/bin/android-env.sh" ]; then
     . "$HOTSPOT/bin/android-env.sh"
 fi
+
+# Gate every mutation before creating work/lock/log files. Explicit stop remains
+# usable during upgrade/removal; status reports the gate without refusing reads.
+unified_probe() {
+    unified_ready=0 unified_reason=unified_guard_unavailable
+    [ -f "$HOTSPOT/bin/unified-guard.sh" ] && [ ! -L "$HOTSPOT/bin/unified-guard.sh" ] || return 69
+    unified_out=$(sh "$HOTSPOT/bin/unified-guard.sh" "$HOTSPOT" check 8>&- 2>&1)
+    unified_rc=$?
+    if [ "$unified_rc" = 0 ]; then
+        unified_ready=1 unified_reason=none
+    else
+        unified_reason=$(printf '%s\n' "$unified_out" | sed -n 's/^REJECT \([a-z0-9_][a-z0-9_]*\).*/\1/p' | head -1)
+        [ -n "$unified_reason" ] || unified_reason=unified_guard_failed
+    fi
+    return "$unified_rc"
+}
+case "$OP" in
+    status|logs|stop) ;;
+    *) unified_probe || { echo "REJECT $unified_reason" >&2; exit 69; } ;;
+esac
 
 # Validate before any chmod, log, lock or record access; never follow a link.
 work_parent=${RADIO_WORK%/*}
@@ -100,6 +120,15 @@ lock_is_busy() {
 }
 
 module_state() {
+    if [ "$1" = "$SIX" ]; then
+        if [ ! -d "$SIX" ] || [ -L "$SIX" ] ||
+            [ ! -f "$SIX/bin/control.sh" ] || [ -L "$SIX/bin/control.sh" ]; then
+            echo missing
+        else
+            module_state "$HOTSPOT"
+        fi
+        return
+    fi
     if [ ! -d "$1" ] || [ -L "$1" ] || [ ! -f "$1/bin/control.sh" ]; then
         echo missing
     elif [ -e "$1/remove" ]; then
@@ -111,6 +140,7 @@ module_state() {
     fi
 }
 module_version() {
+    if [ "$1" = "$SIX" ]; then module_version "$HOTSPOT"; return; fi
     [ -f "$1/module.prop" ] && [ ! -L "$1/module.prop" ] || { echo unknown; return; }
     v=$(sed -n 's/^version=//p' "$1/module.prop" | head -1 | tr -cd 'A-Za-z0-9._-')
     echo "${v:-unknown}"
@@ -141,7 +171,7 @@ key_ok() {
 six_field() { printf '%s\n' "$six_out" | sed -n "s/^$1=//p" | head -1; }
 six_probe() {
     six_state=unknown six_tx=unknown six_tx_path= six_guardian=unknown
-    six_profile=unknown six_compat_error=unknown six_boot_default=unknown six_ready=0
+    six_profile=unknown six_compat_error=unknown six_boot_default=0 six_ready=0
     six_out=$(timeout 20 sh "$SIX/bin/control.sh" "$SIX" status 8>&- 2>&1)
     six_rc=$?
     v=$(six_field state | tr -cd 'a-z_')
@@ -166,7 +196,8 @@ six_probe() {
     [ -z "$v" ] || six_profile=$v
     v=$(six_field compatibility_error | tr -cd 'a-z0-9_')
     [ -z "$v" ] || six_compat_error=$v
-    case "$(six_field enabled_config)" in 0) six_boot_default=0 ;; 1) six_boot_default=1 ;; esac
+    # Standalone enabled_config is not an embedded boot policy. Only the owner
+    # service may autostart the combined AP; six never has its own boot service.
     if [ "$six_rc" = 0 ] && [ "$six_state" = active ] &&
         [ "$six_guardian" = alive ] && [ "$six_tx" = present ]; then
         six_ready=1
@@ -408,7 +439,7 @@ six_rollback() {
         echo "rollback=deferred state=$hot_state rc=$hot_rc"
         return 0
     fi
-    run_six 200 disable
+    run_six 1320 disable
     rb_rc=$?
     [ -z "$sub_out" ] || printf '%s\n' "$sub_out"
     if [ "$rb_rc" = 0 ]; then
@@ -424,10 +455,10 @@ six_rollback() {
 op_start() {
     width=${ARG:-$(pref_width)}
     phase preflight
-    [ "$(module_state "$SIX")" = present ] || {
-        fail preflight "sixg_module_$(module_state "$SIX")" 66; return $?; }
     [ "$(module_state "$HOTSPOT")" = present ] || {
         fail preflight "hotspot_module_$(module_state "$HOTSPOT")" 73; return $?; }
+    [ "$(module_state "$SIX")" = present ] || {
+        fail preflight "sixg_module_$(module_state "$SIX")" 66; return $?; }
     [ "$(getenforce 2>/dev/null)" = Enforcing ] || {
         fail preflight enforcing_required 77; return $?; }
     android_env_ready 2>/dev/null || { fail preflight android_env_unavailable 69; return $?; }
@@ -474,7 +505,7 @@ op_start() {
     owns=0
     if [ "$enabled_now" = 1 ]; then
         phase six_enable
-        run_six 200 enable
+        run_six 1320 enable
         rc=$?
         [ -z "$sub_out" ] || printf '%s\n' "$sub_out"
         if [ "$rc" != 0 ]; then
@@ -577,7 +608,7 @@ op_stop() {
                 return $?
             elif [ "$six_tx" = present ] && [ "$six_tx_path" = "$rec_tx" ]; then
                 phase six_restore
-                run_six 200 disable
+                run_six 1320 disable
                 rc=$?
                 [ -z "$sub_out" ] || printf '%s\n' "$sub_out"
                 if [ "$rc" != 0 ]; then
@@ -610,7 +641,7 @@ op_six_on() {
         fail six_enable sixg_needs_recovery 73 "state=$six_state guardian=$six_guardian tx=$six_tx"
         return $?
     }
-    run_six 200 enable
+    run_six 1320 enable
     rc=$?
     [ -z "$sub_out" ] || printf '%s\n' "$sub_out"
     if [ "$rc" != 0 ]; then
@@ -643,7 +674,7 @@ op_six_off() {
     phase six_restore
     [ "$(module_state "$SIX")" != missing ] || { fail six_restore sixg_module_missing 66; return $?; }
     require_hotspot_idle six_restore || return $?
-    run_six 200 disable
+    run_six 1320 disable
     rc=$?
     [ -z "$sub_out" ] || printf '%s\n' "$sub_out"
     if [ "$rc" != 0 ]; then
@@ -715,6 +746,9 @@ op_status() {
     echo "mode=$mode"
     echo "boot=$boot"
     echo "busy=$busy"
+    unified_probe || :
+    echo "unified_ready=$unified_ready"
+    echo "unified_reason=$unified_reason"
 
     six_module=$(module_state "$SIX")
     echo "six_module=$six_module"
@@ -733,9 +767,7 @@ op_status() {
         if [ "$mode" = full ] && [ -f "$SIX/bin/status-card.sh" ]; then
             card=$(timeout 10 sh "$SIX/bin/status-card.sh" "$SIX" show 8>&- 2>/dev/null | card_text)
         fi
-        if [ -z "$card" ] && [ -f "$SIX/module.prop" ] && [ ! -L "$SIX/module.prop" ]; then
-            card=$(sed -n 's/^description=//p' "$SIX/module.prop" | card_text)
-        fi
+        # There is no second module.prop: registration belongs to this owner.
         echo "six_card=$card"
     fi
 

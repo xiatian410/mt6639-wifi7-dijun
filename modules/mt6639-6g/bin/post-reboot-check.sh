@@ -2,11 +2,17 @@
 # Read-only snapshot check. A pass alone does not prove a reboot occurred.
 set -u
 MODE=${1:-active}
-case "$MODE" in active|restored) ;; *) echo 'usage: post-reboot-check.sh [active|restored]'; exit 64 ;; esac
+case "$MODE" in active|restored) ;; *) echo 'usage: post-reboot-check.sh [active|restored] [embedded-six-path]'; exit 64 ;; esac
+[ "$#" -le 2 ] || exit 64
 if [ "${MT6639_TEST_MODE:-0}" = 1 ]; then
-    MODDIR=${MODDIR:?test mode requires MODDIR}
+    MODDIR=${2:-${MODDIR:?test mode requires MODDIR}}
 else
     MODDIR=/data/adb/modules/mt6639-6g
+    case "${2:-}" in
+        '') ;;
+        /data/adb/modules/mt6639-hotspot/six) MODDIR=$2 ;;
+        *) echo 'REJECT invalid_six_path' >&2; exit 64 ;;
+    esac
 fi
 . "$MODDIR/bin/lib.sh"
 KO=$STOCK_KO
@@ -33,15 +39,15 @@ if [ -d "$MODDIR" ]; then
 else
     bad "module_not_active_path"
 fi
-if [ -f "$MODDIR/module.prop" ]; then
-    ver=$(grep '^version=' "$MODDIR/module.prop" | cut -d= -f2-)
+if [ -f "$MODULE_OWNER/module.prop" ]; then
+    ver=$(grep '^version=' "$MODULE_OWNER/module.prop" | cut -d= -f2-)
     say "module_version=$ver"
     # Never pin a literal version here: this checker is also consumed by the
     # hotspot module as its station checker, so a version bump in the 6GHz module
     # used to make every hotspot teardown report recovery_rc=1. Verify the module
     # tree against its own SHA256SUMS instead — it is stronger and version-agnostic.
-    [ -f "$MODDIR/SHA256SUMS" ] || bad "module_sums_missing"
-    if [ -f "$MODDIR/SHA256SUMS" ]; then
+    [ -f "$MODULE_OWNER/SHA256SUMS" ] || bad "module_sums_missing"
+    if [ -f "$MODULE_OWNER/SHA256SUMS" ]; then
         sh "$MODDIR/bin/verify-module.sh" "$MODDIR" ||
             bad "module_sums_mismatch"
     fi
@@ -61,7 +67,7 @@ if [ "$MODE" = active ]; then
     expected=$(sed 's/^DisallowBand6G 1$/DisallowBand6G 0/' "$backup" 2>/dev/null | sha256sum | cut -d' ' -f1)
     [ "$cfg" = "$expected" ] || bad "cfg_not_expected_candidate"
     grep -q " $CFG " "$MOUNTINFO_FILE" 2>/dev/null || bad "cfg_mount_missing"
-    [ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ] || bad "module_disabled_or_removing"
+    require_owner_enabled || bad "module_disabled_or_removing"
     runtime=$(sh "$MODDIR/bin/native.sh" "$MODDIR" status) || bad "native_status_failed"
     say "$runtime"
     printf '%s\n' "$runtime" | grep -qx 'guardian=alive' || bad "guardian_not_alive"

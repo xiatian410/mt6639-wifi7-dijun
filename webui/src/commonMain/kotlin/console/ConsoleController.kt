@@ -49,7 +49,9 @@ data class ConsoleState(
 class ConsoleController(
     private val backend: Backend,
     private val scope: CoroutineScope,
-    private val opTimeoutMs: Long = 20 * 60_000L,
+    // Covers bounded enable + AP start/stop + checked rollback, including
+    // guardian recovery followed by a second journal-verified recovery attempt.
+    private val opTimeoutMs: Long = 75 * 60_000L,
     private val statusTimeoutMs: Long = 90_000L,
 ) {
     private val _state = MutableStateFlow(ConsoleState(demo = backend.demo))

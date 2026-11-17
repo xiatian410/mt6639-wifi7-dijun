@@ -2,7 +2,7 @@
 
 ## 本 fork 当前维护
 
-2026-11-17：热点 **v0.3.1-dijun.1** 增加可编辑 SSID（下次启动应用）与 WebUI 触摸滑动修复，保留 v0.3.0 的单一 6GHz + 热点操作入口。一次启动按序启用 6GHz、等待 WLAN 稳定、启动热点，停止时仅恢复本会话归属的 6GHz 事务。两个模块 ID 仍独立。离线宿主测试、桌面 Chromium 与模拟 KernelSU 桥接通过；没有 Android WebView 或设备无线验证。[构建和安装说明](modules/mt6639-hotspot/README.md)。
+2026-11-17：**6GHz + 热点二合一 v0.4.0-dijun.1** 使用一个 ZIP、一个 `mt6639-hotspot` 模块 ID，内置 6GHz 后端和 Miuix WebUI，保留可编辑 SSID 与触摸滑动修复。原生事务程序已用 Android NDK 重编，恢复前先停热点并持操作锁完成恢复。**旧用户须先停止热点、恢复 6GHz，卸载旧独立 `mt6639-6g` 并完整重启，再安装二合一包并重启；新用户只安装二合一包。** 默认不开机自动启用无线。离线构建/夹具及浏览器验证不代表 Android 真机、无线或客户端联网验收。[构建、迁移与安装说明](modules/mt6639-hotspot/README.md)。
 
 本批新增 **蓝牙 v0.2.0-dijun.1** 的 OS4 已核对组件适配、恢复重试与状态查询修复，以及 **热点 v0.2.23-dijun.1** 的直接入口目录验证。蓝牙不再因 OTA 显示版本变化而单独拒绝相同组件；未知 APK 仍拒绝启用。[本批范围、六模块状态与剩余边界](docs/研究-蓝牙组件与模块维护-20261115.md)。 [本批候选下载](https://github.com/xiatian410/mt6639-wifi7-dijun/releases/tag/v0.4.0-dijun.1)。
 

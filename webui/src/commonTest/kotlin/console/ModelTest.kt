@@ -15,6 +15,8 @@ class ModelTest {
         mode=full
         boot=11111111-1111-4111-8111-111111111111
         busy=0
+        unified_ready=1
+        unified_reason=none
         six_module=present
         six_version=v0.3.3-dijun.1
         six_status_rc=0
@@ -80,6 +82,21 @@ class ModelTest {
         assertEquals(80, s.prefWidth)
         // The running width names the network, not the saved preference.
         assertEquals("MT6639-Native-6g-160", s.ssid)
+    }
+
+    @Test
+    fun unifiedMigrationBlocksStartsAndRefreshButKeepsHotspotStopAvailable() {
+        val active = assertNotNull(parseStatus(full.replace("unified_ready=1", "unified_ready=0")
+            .replace("unified_reason=none", "unified_reason=unified_reboot_required")))
+        val state = ConsoleState(demo = false, loaded = true, status = active)
+        assertTrue(Presentation.hotspotEnabled(state))
+        assertFalse(Presentation.sixRefreshEnabled(state))
+        assertFalse(Presentation.sixEnabled(state))
+        val idle = state.copy(status = active.copy(hotspotState = HotspotState.Idle))
+        assertFalse(Presentation.hotspotEnabled(idle))
+        assertTrue(Presentation.hotspotSummary(idle).contains("重启"))
+        val missing = assertNotNull(parseStatus(full.replace("unified_ready=1", "")))
+        assertFalse(missing.unifiedReady)
     }
 
     @Test

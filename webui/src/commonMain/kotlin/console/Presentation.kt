@@ -23,7 +23,8 @@ object Presentation {
         val s = state.status ?: return false
         if (state.op != null || s.busy) return false
         return when (s.hotspotState) {
-            HotspotState.Idle, HotspotState.Active, HotspotState.Unresolved -> true
+            HotspotState.Idle -> s.unifiedReady
+            HotspotState.Active, HotspotState.Unresolved -> true
             else -> false
         }
     }
@@ -41,7 +42,8 @@ object Presentation {
                     "已开启 · ${s.shownWidth} MHz · 信道 ${s.hotspotChannel}（${s.hotspotFreq} MHz）"
                 else -> "已开启 · ${s.shownWidth} MHz"
             }
-            HotspotState.Idle -> if (s.sixReady) "已关闭" else "已关闭 · 开启时会先启用 6GHz"
+            HotspotState.Idle -> if (!s.unifiedReady) Messages.reason(s.unifiedReason)
+                else if (s.sixReady) "已关闭" else "已关闭 · 开启时会先启用 6GHz"
             HotspotState.Starting -> "正在启动（由其他入口发起）"
             HotspotState.Stopping -> "正在停止（由其他入口发起）"
             HotspotState.Unresolved -> "状态未确认 · 关闭开关可让模块恢复"
@@ -82,7 +84,7 @@ object Presentation {
 
     fun sixEnabled(state: ConsoleState): Boolean {
         val s = state.status ?: return false
-        if (state.op != null || s.busy) return false
+        if (state.op != null || s.busy || !s.unifiedReady) return false
         if (s.sixModule == ModuleState.Missing || s.sixModule == ModuleState.Unknown) return false
         // Enabling needs an enabled module; restoring does not.
         if (!sixChecked(state) && s.sixModule != ModuleState.Present) return false
@@ -96,7 +98,7 @@ object Presentation {
         }
         val s = state.status ?: return "状态未知"
         val base = when {
-            s.sixModule == ModuleState.Missing -> return "没有安装 6GHz 模块（mt6639-6g）"
+            s.sixModule == ModuleState.Missing -> return "内置 6GHz 后端缺失，请重新安装完整二合一模块"
             s.sixModule == ModuleState.Removing -> "6GHz 模块已标记为待移除"
             s.sixModule == ModuleState.Disabled && !s.sixReady -> "6GHz 模块已被禁用"
             s.sixReady && s.sessionOwns6g -> "已启用 · 由一键开启启用，关闭热点时一并恢复"
@@ -121,18 +123,19 @@ object Presentation {
 
     fun sixRefreshEnabled(state: ConsoleState): Boolean {
         val s = state.status ?: return false
-        return state.op == null && !s.busy && s.sixReady && s.sixModule == ModuleState.Present &&
+        return state.op == null && !s.busy && s.unifiedReady && s.sixReady && s.sixModule == ModuleState.Present &&
             s.hotspotState == HotspotState.Idle
     }
 
     /** The checks a start runs first, in the order the script runs them. */
     fun conditions(s: RadioStatus): List<Condition> {
         val list = ArrayList<Condition>()
+        list += Condition("二合一模块", if (s.unifiedReady) "已完成安装后的重启" else Messages.reason(s.unifiedReason), s.unifiedReady)
         list += when (s.sixModule) {
-            ModuleState.Present -> Condition("6GHz 模块", "已安装 ${s.sixVersion}", true)
+            ModuleState.Present -> Condition("6GHz 后端", "已内置 ${s.sixVersion}", true)
             ModuleState.Disabled -> Condition("6GHz 模块", "已在管理器里被禁用", false)
             ModuleState.Removing -> Condition("6GHz 模块", "已标记为待移除", false)
-            ModuleState.Missing -> Condition("6GHz 模块", "没有安装 mt6639-6g", false)
+            ModuleState.Missing -> Condition("6GHz 后端", "内置文件缺失，请重装二合一模块", false)
             ModuleState.Unknown -> Condition("6GHz 模块", "状态未知", null)
         }
         list += when (s.identity) {
@@ -199,6 +202,6 @@ object Presentation {
     fun cardText(card: String): String = card.replace(" | ", "\n")
 
     fun versions(s: RadioStatus): String =
-        "热点模块 ${s.hotspotVersion} · 6GHz 模块 " +
-            if (s.sixModule == ModuleState.Missing) "未安装" else s.sixVersion
+        "二合一模块 ${s.hotspotVersion} · 内置 6GHz 后端 " +
+            if (s.sixModule == ModuleState.Missing) "缺失" else s.sixVersion
 }

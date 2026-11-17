@@ -91,7 +91,13 @@ object Messages {
         "hotspot_module_disabled" to "本模块已在管理器里被禁用。",
         "hotspot_module_removing" to "本模块已被标记为待移除。",
         "hotspot_module_missing" to "找不到热点模块的控制脚本。请重新安装本模块。",
-        "sixg_module_missing" to "没有安装 6GHz 模块（mt6639-6g）。6GHz 热点需要它。",
+        "sixg_module_missing" to "内置 6GHz 后端缺失。请重新安装完整的二合一模块，不需要另装 6GHz 模块。",
+        "legacy_six_module_present" to "检测到旧独立 6GHz 模块或待安装副本。请先停止热点、恢复 6GHz，在管理器卸载旧 mt6639-6g 并重启，再安装二合一包。",
+        "unified_reboot_required" to "二合一模块刚安装，请完整重启手机后使用；软重启不算。",
+        "unified_install_record_invalid" to "安装记录缺失或无效，请用管理器重新安装完整二合一包并重启。",
+        "unified_module_directory_invalid" to "二合一模块目录无效，请重新安装。",
+        "unified_boot_unreadable" to "读不到有效的内核启动标识，不能安全接管无线事务。",
+        "unified_status_missing" to "后端未报告二合一就绪状态，请确认安装的是完整的新版本并重启。",
         "sixg_module_disabled" to "6GHz 模块（mt6639-6g）已在管理器里被禁用。",
         "sixg_module_removing" to "6GHz 模块（mt6639-6g）已被标记为待移除。",
         "sixg_status_unavailable" to "读不到 6GHz 模块的状态。",
@@ -107,7 +113,7 @@ object Messages {
         "width_unwritable" to "无法保存带宽设置（/data/adb/mt6639-radio）。",
 
         // Launch problems, from the exit status alone.
-        "controller_missing" to "找不到控制脚本。请确认安装的是带控制台的热点模块（v0.3.0-dijun.1 或更新），并已重启。",
+        "controller_missing" to "找不到控制脚本。请确认安装的是完整二合一模块（v0.4.0-dijun.1 或更新），并已重启。",
         "not_root_or_wrong_context" to "脚本没有运行在 KernelSU 的 root 环境（u:r:ksu:s0）里，或者工作目录的归属不对。",
         "module_files_missing" to "模块目录不完整。请重新安装本模块。",
         "work_directory_unwritable" to "无法准备工作目录 /data/adb/mt6639-radio。",

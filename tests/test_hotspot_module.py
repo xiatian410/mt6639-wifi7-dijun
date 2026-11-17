@@ -21,6 +21,7 @@ if os.environ.get("MT6639_HOTSPOT_INPUTS"):
     DEX_TETHER = _inputs / "native-tether.dex"
     HOSTAPD_DIR = _inputs
     DELETE_IFINDEX = _inputs / "delete_ifindex"
+MOUNT_TXN = Path(os.environ.get("MT6639_UNIFIED_MOUNT_TXN", "/nonexistent/unified-mount-txn"))
 BOOT_ID = "11111111-2222-3333-4444-555555555555"
 
 
@@ -313,18 +314,29 @@ process_one() { echo process >> "$D/calls"; }
             self.assertIn("rc=255\n", result)
 
     @unittest.skipUnless(
-        DEX_PROFILE.is_file() and DEX_TETHER.is_file() and DELETE_IFINDEX.is_file() and
+        MOUNT_TXN.is_file() and DEX_PROFILE.is_file() and DEX_TETHER.is_file() and DELETE_IFINDEX.is_file() and
         (HOSTAPD_DIR / "hostapd").is_file() and (HOSTAPD_DIR / "hostapd_cli").is_file(),
         "pinned candidate artifacts are unavailable",
     )
     def test_reproducible_module_package(self):
         with tempfile.TemporaryDirectory(prefix="mt6639-hotspot-package-") as td:
+            # Installer migration policy has its own real-guard fixtures. Here
+            # only its fixed invocation is doubled so ZIP integrity stays intact.
+            stubs = Path(td) / "stubs"
+            stubs.mkdir()
+            shell = stubs / "sh"
+            shell.write_text('#!/bin/sh\ncase "$1" in */bin/unified-guard.sh)\n'
+                             ' [ "$3" = install ] || exit 64\n'
+                             ' printf "%s\\n" "' + BOOT_ID + '" > "$2/.unified-install-boot"\n'
+                             ' chmod 0600 "$2/.unified-install-boot"; exit 0 ;;\nesac\nexec /bin/sh "$@"\n')
+            shell.chmod(0o755)
+            installer_env = dict(os.environ, PATH=str(stubs) + ':' + os.environ['PATH'])
             outputs = [Path(td) / "mt6639-hotspot-1.zip", Path(td) / "mt6639-hotspot-2.zip"]
             for out in outputs:
                 result = subprocess.run([
                     "sh", str(REPO / "tools/build_hotspot_module.sh"),
                     str(HOSTAPD_DIR), str(DEX_TETHER), str(DEX_PROFILE),
-                    str(DELETE_IFINDEX), str(out),
+                    str(DELETE_IFINDEX), str(out), "", str(MOUNT_TXN),
                 ], capture_output=True, text=True, timeout=90)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertTrue(out.is_file())
@@ -332,6 +344,19 @@ process_one() { echo process >> "$D/calls"; }
                 hashlib.sha256(outputs[0].read_bytes()).hexdigest(),
                 hashlib.sha256(outputs[1].read_bytes()).hexdigest(),
             )
+            # Never silently substitute the old standalone binary or trust an
+            # externally supplied checksum for the required native input.
+            bad_native = Path(td) / 'standalone-mount-txn'
+            bad_native.write_bytes(b'not-the-pinned-unified-native')
+            rejected_zip = Path(td) / 'rejected.zip'
+            result = subprocess.run([
+                'sh', str(REPO / 'tools/build_hotspot_module.sh'),
+                str(HOSTAPD_DIR), str(DEX_TETHER), str(DEX_PROFILE),
+                str(DELETE_IFINDEX), str(rejected_zip), '', str(bad_native),
+            ], capture_output=True, text=True, timeout=90)
+            self.assertEqual(result.returncode, 69, result.stderr)
+            self.assertIn('sha256_mismatch', result.stderr)
+            self.assertFalse(rejected_zip.exists())
             out = outputs[0]
             with zipfile.ZipFile(out) as archive:
                 names = set(archive.namelist())
@@ -351,9 +376,19 @@ process_one() { echo process >> "$D/calls"; }
                     "bin/twt_recover.sh", "SHA256SUMS", "ASSET-PROVENANCE.txt",
                 }:
                     self.assertIn(required, names)
+                for required in ('six/config.conf', 'six/compatibility.conf', 'six/bin/mount-txn',
+                                 'six/bin/control.sh', 'six/bin/post-reboot-check.sh',
+                                 'bin/unified-guard.sh', 'bin/radio-teardown.sh'):
+                    self.assertIn(required, names)
+                for excluded in ('six/module.prop', 'six/service.sh', 'six/uninstall.sh'):
+                    self.assertNotIn(excluded, names)
+                self.assertEqual(archive.read('six/bin/mount-txn'), MOUNT_TXN.read_bytes())
                 self.assertFalse(any(name.endswith(("ap.key", "reconnect.key")) for name in names))
                 self.assertFalse(any(name.startswith(("outputs/", "local/")) for name in names))
                 sums = archive.read("SHA256SUMS").decode()
+                for name in names:
+                    if name.startswith('six/'):
+                        self.assertIn(hashlib.sha256(archive.read(name)).hexdigest() + '  ' + name + '\n', sums)
                 self.assertIn("bin/hostapd", sums)
                 self.assertIn("bin/control.sh", sums)
                 self.assertIn("bin/status_snapshot.sh", sums)
@@ -380,7 +415,7 @@ process_one() { echo process >> "$D/calls"; }
                 result = subprocess.run([
                     "sh", str(REPO / "tools/build_hotspot_module.sh"),
                     str(HOSTAPD_DIR), str(DEX_TETHER), str(DEX_PROFILE),
-                    str(DELETE_IFINDEX), str(webui_zip), str(webroot),
+                    str(DELETE_IFINDEX), str(webui_zip), str(webroot), str(MOUNT_TXN),
                 ], capture_output=True, text=True, timeout=90)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 with zipfile.ZipFile(webui_zip) as webui_archive:
@@ -393,7 +428,7 @@ process_one() { echo process >> "$D/calls"; }
                     self.assertIn("  webroot/app.wasm\n", webui_sums)
                     webui_install = Path(td) / "webui-installed"
                     webui_archive.extractall(webui_install)
-                webui_env = dict(os.environ, MODPATH=str(webui_install))
+                webui_env = dict(installer_env, MODPATH=str(webui_install))
                 webui_hook = subprocess.run(["sh", str(webui_install / "customize.sh")],
                                              env=webui_env, capture_output=True, text=True)
                 self.assertEqual(webui_hook.returncode, 0, webui_hook.stderr)
@@ -414,7 +449,7 @@ process_one() { echo process >> "$D/calls"; }
                 # not just an untouched ZIP; no Android/radio code is run.
                 installed = Path(td) / "installed"
                 archive.extractall(installed)
-            env = dict(os.environ, MODPATH=str(installed))
+            env = dict(installer_env, MODPATH=str(installed))
             hook = subprocess.run(["sh", str(installed / "customize.sh")],
                                   env=env, capture_output=True, text=True, timeout=10)
             self.assertEqual(hook.returncode, 0, hook.stderr)
@@ -431,7 +466,8 @@ process_one() { echo process >> "$D/calls"; }
                                       else line for line in prop.read_text().splitlines()) + '\n')
             self.assertEqual(verify().returncode, 0)
             original = prop.read_bytes()
-            prop.write_text(prop.read_text().replace('versionCode=36', 'versionCode=99'))
+            prop.write_text('\n'.join('versionCode=999999' if line.startswith('versionCode=') else line
+                                      for line in prop.read_text().splitlines()) + '\n')
             self.assertNotEqual(verify().returncode, 0)
             prop.write_bytes(original)
             asset = installed / "bin/control.sh"
@@ -555,6 +591,10 @@ process_one() { echo process >> "$D/calls"; }
         env["PATH"] = f"{bindir}:/usr/bin:/bin"
         env["MT6639_TEST_LOG"] = str(log)
         if service_start:
+            (bindir / 'id').write_text('#!/bin/sh\ncase "$1" in -Z) echo u:r:ksu:s0 ;; *) echo 0 ;; esac\n')
+            (bindir / 'id').chmod(0o755)
+            for helper in ('verify-module.sh', 'unified-guard.sh'):
+                (module / 'bin' / helper).write_text('#!/bin/sh\nexit 0\n')
             (module / "config.conf").write_text((MOD / "config.conf").read_text())
             (module / "service.sh").write_text((MOD / "service.sh").read_text())
             (module / "bin/status_snapshot.sh").write_text("#!/bin/sh\nexit 0\n")

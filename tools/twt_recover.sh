@@ -1,11 +1,16 @@
 #!/system/bin/sh
 # Recovery/verification only: never sends TWT, cycles Wi-Fi, or loads modules.
-# check|select TASK BOOT SSID FREQ BSSID PEER CHECKER
+# check|select TASK BOOT SSID FREQ BSSID PEER CHECKER [SIX]
 # TASK is a fresh root-private directory; select reads TASK/reconnect.key.
 set -u
 umask 077
-[ "$#" -eq 8 ] || exit 64
+[ "$#" -eq 8 ] || [ "$#" -eq 9 ] || exit 64
 MODE=$1 D=$2 BOOT=$3 SSID=$4 FREQ=$5 BSSID=$6 PEER=$7 CHECKER=$8
+SIX=${9:-}
+case "$SIX" in ''|/data/adb/modules/mt6639-hotspot/six) ;; *) exit 64 ;; esac
+if [ -n "$SIX" ]; then
+    [ "$CHECKER" = "$SIX/bin/post-reboot-check.sh" ] || exit 64
+fi
 case "$MODE" in check|select) ;; *) exit 64 ;; esac
 case "$D" in /*) ;; *) exit 64 ;; esac
 [ -d "$D" ] && [ ! -L "$D" ] && [ -f "$CHECKER" ] || exit 64
@@ -104,7 +109,11 @@ while [ "$stable" -lt 2 ]; do
 done
 log target_ready
 guard
-timeout 15 sh "$CHECKER" active > "$V/checker.txt" 2>&1
+if [ -n "$SIX" ]; then
+    timeout 15 sh "$CHECKER" active "$SIX" > "$V/checker.txt" 2>&1
+else
+    timeout 15 sh "$CHECKER" active > "$V/checker.txt" 2>&1
+fi
 rc=$?
 [ "$rc" = 0 ] && grep -qx 'RESULT fail=0' "$V/checker.txt" || fail checker_failed 70
 timeout 10 ping -I wlan0 -c 3 -W 2 "$PEER" > "$V/ping.txt" 2>&1

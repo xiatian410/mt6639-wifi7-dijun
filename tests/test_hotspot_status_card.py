@@ -97,7 +97,7 @@ if [ "$2" = %u ]; then echo 0; else exec REAL_STAT "$@"; fi
         self.assertEqual(self.card().returncode, 0)
         self.assertEqual(self.verify(), 0)
         p = self.mod / 'module.prop'
-        p.write_text(p.read_text().replace('versionCode=36', 'versionCode=99'))
+        p.write_text(p.read_text().replace('versionCode=37', 'versionCode=99'))
         self.assertNotEqual(self.verify(), 0)
         shutil.copyfile(self.mod / 'module.prop.template', p)
         p = self.mod / 'bin/status-card.sh'
@@ -182,6 +182,11 @@ if [ "$2" = %u ]; then echo 0; else exec REAL_STAT "$@"; fi
     def test_controller_failure_rc_preserved_with_renderer_failure(self):
         # The real controller rejects no-key startup before radio operations.
         # Failing presentation must not change that result or recovery logic.
+        # Model a completed installation from a previous kernel boot so this
+        # test reaches the no-key rejection rather than the migration gate.
+        marker = self.mod / '.unified-install-boot'
+        marker.write_text('22222222-2222-4222-8222-222222222222\n')
+        marker.chmod(0o600)
         r = subprocess.run(['sh', str(self.mod / 'bin/control.sh'), str(self.mod), 'start'],
                            env=self.env, capture_output=True, text=True, timeout=10)
         self.assertEqual(r.returncode, 66, r.stdout + r.stderr)

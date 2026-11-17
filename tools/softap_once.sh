@@ -8,6 +8,7 @@ case "$D" in /data/local/tmp/mt6639-ap-*) ;; *) exit 64 ;; esac
     [ "$(stat -c %a "$D")" = 700 ] && [ "$(id -Z)" = u:r:ksu:s0 ] &&
     [ "$(getenforce)" = Enforcing ] || exit 77
 SELF=$D/softap_once.sh
+SIX=/data/adb/modules/mt6639-hotspot/six
 profile() { sh "$D/softap_profile.sh" "$D" "$@"; }
 java() { CLASSPATH="$D/softap-profile.dex" timeout -k 2 12 app_process /system/bin WifiSoftApProfile "$@"; }
 boot_ok() { [ "$(cat /proc/sys/kernel/random/boot_id)" = "$(cat "$D/boot.before")" ]; }
@@ -30,11 +31,11 @@ recover() {
     mkdir "$D/network-recover" || rc=1
     if [ -d "$D/network-recover" ]; then
         cp "$D/reconnect.key" "$D/network-recover/reconnect.key" || rc=1
-        sh "$D/twt_recover.sh" check "$D/network-recover" "$(cat "$D/boot.before")" LabNet-6G 6135 02:00:00:00:73:1c 198.51.100.242 /data/adb/modules/mt6639-6g/bin/post-reboot-check.sh > "$D/network.check" 2>&1
+        sh "$D/twt_recover.sh" check "$D/network-recover" "$(cat "$D/boot.before")" LabNet-6G 6135 02:00:00:00:73:1c 198.51.100.242 "$SIX/bin/post-reboot-check.sh" "$SIX" > "$D/network.check" 2>&1
         if [ "$?" != 0 ]; then
             mkdir "$D/network-select" || rc=1
             cp "$D/reconnect.key" "$D/network-select/reconnect.key" || rc=1
-            sh "$D/twt_recover.sh" select "$D/network-select" "$(cat "$D/boot.before")" LabNet-6G 6135 02:00:00:00:73:1c 198.51.100.242 /data/adb/modules/mt6639-6g/bin/post-reboot-check.sh > "$D/network.select" 2>&1 || rc=1
+            sh "$D/twt_recover.sh" select "$D/network-select" "$(cat "$D/boot.before")" LabNet-6G 6135 02:00:00:00:73:1c 198.51.100.242 "$SIX/bin/post-reboot-check.sh" "$SIX" > "$D/network.select" 2>&1 || rc=1
         fi
     fi
     printf '%s\n' "$rc" > "$D/recovery.rc"
@@ -52,6 +53,9 @@ case "$OP" in
     run|run-24g|run-5g) ;;
     *) exit 64 ;;
 esac
+# Setup must not bypass the unified owner's reboot/legacy-module barrier.
+sh /data/adb/modules/mt6639-hotspot/bin/unified-guard.sh \
+    /data/adb/modules/mt6639-hotspot check || exit $?
 exec 8>"$D/owner.lock"
 flock -n 8 8>&8 || exit 75
 (set -C; : > "$D/trial.claimed") 2>/dev/null || exit 73

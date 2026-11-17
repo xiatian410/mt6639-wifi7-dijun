@@ -220,14 +220,26 @@ boot_id() { return 70; }
         (task / 'softap_native_config.sh').write_text('#!/bin/sh\nexit 0\n')
         (task / 'ap.key').write_text('fixture-password\n')
         (task / 'ap.conf').write_text('fixture\n')
+        owner = self.root / 'installed-module'
+        (owner / 'bin').mkdir(parents=True)
+        (owner / 'bin/unified-guard.sh').write_text(
+            '#!/bin/sh\n[ "${TEST_UNIFIED_READY:-1}" = 1 ] && exit 0\n'
+            'echo "REJECT unified_reboot_required" >&2\nexit 73\n')
         forward = self.root / 'ip_forward'
         forward.write_text('0\n')
         src = (ROOT / 'tools/softap_native_once.sh').read_text().replace(
             '/data/local/tmp/mt6639-native-ap-', str(self.root / 'mt6639-native-ap-')).replace(
-            '/data/adb/modules/mt6639-hotspot', str(self.root / 'no-installed-module')).replace(
+            '/data/adb/modules/mt6639-hotspot', str(owner)).replace(
             '/proc/sys/net/ipv4/ip_forward', str(forward)).replace('/sys/class/net/', str(self.root / 'no-net') + '/')
         runner = task / 'softap_native_once.sh'
         runner.write_text(src)
+        denied = subprocess.run(['sh', str(runner), str(task), 'run-tether', '6g', '20'],
+                                env=dict(self.env, TEST_UNIFIED_READY='0'),
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(denied.returncode, 73, denied.stderr)
+        self.assertIn('unified_reboot_required', denied.stderr)
+        self.assertFalse((task / 'owner.lock').exists())
+        self.assertFalse(marker.exists())
         for status, mode in [
             ('Wifi is enabled\nWifi is disconnected\n', 'cell'),
             ('Wifi is enabled\nWifi is connected to "LabNet-other"\nSupplicant state: COMPLETED\nFrequency: 6135MHz\n', 'wifi-any'),

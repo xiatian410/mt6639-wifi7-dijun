@@ -192,7 +192,7 @@ class RadioFixture(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.adb = self.root / 'adb'
         self.mod = self.adb / 'modules/mt6639-hotspot'
-        self.sixmod = self.adb / 'modules/mt6639-6g'
+        self.sixmod = self.mod / 'six'
         self.work = self.adb / 'mt6639-radio'
         self.hot_work = self.adb / 'mt6639-hotspot'
         self.misc = self.root / 'misc'
@@ -208,6 +208,9 @@ class RadioFixture(unittest.TestCase):
         shutil.copyfile(SIX / 'bin/compat.sh', self.mod / 'bin/compat.sh')
         shutil.copyfile(SIX / 'compatibility.conf', self.mod / 'bin/compatibility.conf')
         (self.mod / 'bin/android-env.sh').write_text('android_env_ready() { return 0; }\n')
+        (self.mod / 'bin/unified-guard.sh').write_text(
+            '#!/bin/sh\n[ "${TEST_UNIFIED_REASON:-none}" = none ] && exit 0\n'
+            'echo "REJECT $TEST_UNIFIED_REASON" >&2\nexit 69\n')
         if not self.real_hotspot:
             (self.mod / 'bin/control.sh').write_text(self.fill(HOTSPOT_DOUBLE))
         for path in self.mod.rglob('*.sh'):
@@ -217,8 +220,9 @@ class RadioFixture(unittest.TestCase):
 
         (self.sixmod / 'bin').mkdir(parents=True)
         (self.sixmod / 'bin/control.sh').write_text(self.fill(SIX_DOUBLE))
-        (self.sixmod / 'module.prop').write_text(
-            'id=mt6639-6g\nversion=v9.9.9-fixture\ndescription=[事务运行] 6GHz：60个已注册信道\n')
+        (self.sixmod / 'bin/status-card.sh').write_text(
+            '#!/bin/sh\necho "[事务运行] 6GHz：60个已注册信道"\n')
+        self.sums()
 
         self.hot_work.mkdir(mode=0o700)
         private = self.hot_work / 'private'
@@ -326,13 +330,44 @@ class RadioFixture(unittest.TestCase):
 
 
 class RadioControlTests(RadioFixture):
+    def test_unified_guard_blocks_mutations_but_status_and_stop_remain_available(self):
+        env = {'TEST_UNIFIED_REASON': 'unified_reboot_required'}
+        for args in [('start',), ('toggle',), ('six-on',), ('six-off',),
+                     ('six-refresh',), ('set-width', '80')]:
+            with self.subTest(args=args):
+                r = self.run_op(*args, env=env)
+                self.assertNotEqual(r.returncode, 0)
+                self.assertIn('REJECT unified_reboot_required', r.stderr)
+                self.assertFalse(self.work.exists())
+                self.assertEqual(self.calls(), [])
+        r = self.run_op('status', env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('unified_ready=0', r.stdout)
+        self.assertIn('unified_reason=unified_reboot_required', r.stdout)
+        self.assertEqual(self.run_op('stop', env=env).returncode, 0)
+        self.assertEqual(self.status()['unified_ready'], '1')
+        self.assertEqual(self.status()['unified_reason'], 'none')
+
+    def test_embedded_six_has_owner_lifecycle_and_no_legacy_fallback(self):
+        for flag, expected in [('disable', 'disabled'), ('remove', 'removing')]:
+            marker = self.mod / flag
+            marker.touch()
+            self.assertEqual(self.status()['six_module'], expected)
+            marker.unlink()
+        shutil.rmtree(self.sixmod)
+        legacy = self.adb / 'modules/mt6639-6g/bin'
+        legacy.mkdir(parents=True)
+        (legacy / 'control.sh').write_text(self.fill(SIX_DOUBLE))
+        self.assertEqual(self.status()['six_module'], 'missing')
+        self.assertIn('sixg_module_missing', self.run_op('start').stderr)
+
     def test_status_reports_both_layers_and_changes_nothing(self):
         s = self.status()
         self.assertEqual(s['schema'], 'mt6639-radio-status-v1')
         self.assertEqual((s['mode'], s['busy'], s['boot']), ('light', '0', BOOT))
         self.assertEqual((s['six_module'], s['six_tx'], s['six_ready']), ('present', 'none', '0'))
-        self.assertEqual(s['six_version'], 'v9.9.9-fixture')
-        self.assertEqual(s['six_card'], '[事务运行] 6GHz：60个已注册信道')
+        self.assertEqual(s['six_version'], s['hotspot_version'])
+        self.assertEqual(s['six_card'], '')  # light status has no standalone prop fallback
         # No snapshot was ever published, and a light status never asks for one.
         self.assertEqual((s['hotspot_state'], s['hotspot_checked'], s['hotspot_snapshot']),
                          ('unknown', '0', '0'))
@@ -343,6 +378,7 @@ class RadioControlTests(RadioFixture):
         self.assertFalse((self.fix / 'calls').exists())
 
         full = self.status('full')
+        self.assertEqual(full['six_card'], '[事务运行] 6GHz：60个已注册信道')
         self.assertEqual((full['mode'], full['hotspot_checked'], full['hotspot_state']),
                          ('full', '1', 'idle'))
         self.assertEqual((full['integrity'], full['identity'], full['identity_reason']),
@@ -508,8 +544,8 @@ class RadioControlTests(RadioFixture):
         def wifi_query_fails(): (self.fix / 'wifi').unlink()
         def no_cell(): (self.fix / 'ipaddr').write_text('    inet 127.0.0.1/8 scope host lo\n')
         def mtap(): (self.root / 'net/mtap0').mkdir(parents=True)
-        def six_disabled(): (self.sixmod / 'disable').touch()
-        def six_removing(): (self.sixmod / 'remove').touch()
+        def six_disabled(): (self.mod / 'disable').touch()
+        def six_removing(): (self.mod / 'remove').touch()
         def six_missing(): shutil.rmtree(self.sixmod)
         def hotspot_disabled(): (self.mod / 'disable').touch()
         def tampered():
@@ -530,8 +566,8 @@ class RadioControlTests(RadioFixture):
             (no_cell, {}, 'cellular_data_unavailable', 69),
             (None, {'TEST_TETHER_WANTED': 'true'}, 'tethering_not_idle', 73),
             (mtap, {}, 'mtap0_exists', 73),
-            (six_disabled, {}, 'sixg_module_disabled', 66),
-            (six_removing, {}, 'sixg_module_removing', 66),
+            (six_disabled, {}, 'hotspot_module_disabled', 73),
+            (six_removing, {}, 'hotspot_module_removing', 73),
             (six_missing, {}, 'sixg_module_missing', 66),
             (hotspot_disabled, {}, 'hotspot_module_disabled', 73),
             (tampered, {}, 'module_asset_hash_mismatch', 69),
@@ -899,7 +935,7 @@ class RadioContractTests(RadioFixture):
         cfg.write_text('CountryCode=CN\n')
         ko.write_text('stock ko\n')
         env = dict(
-            MT6639_TEST_MODE='1', WORK=str(six_work), CFG=str(cfg), STOCK_KO=str(ko),
+            MT6639_TEST_MODE='1', MT6639_TEST_MODULE_OWNER=str(self.mod), WORK=str(six_work), CFG=str(cfg), STOCK_KO=str(ko),
             STOCK_CFG_SHA=hashlib.sha256(cfg.read_bytes()).hexdigest(),
             STOCK_KO_SHA=hashlib.sha256(ko.read_bytes()).hexdigest(),
             BOOT_ID_FILE=str(self.bootfile), TEST_OWNER=str(os.getuid()))
@@ -914,7 +950,7 @@ class RadioContractTests(RadioFixture):
         self.assertEqual((s['six_status_rc'], s['six_tx'], s['six_guardian']), ('0', 'none', 'none'))
         self.assertEqual((s['six_state'], s['six_profile'], s['six_compat_error']),
                          ('none', 'fixture', 'none'))
-        self.assertEqual((s['six_boot_default'], s['six_ready']), ('1', '0'))
+        self.assertEqual((s['six_boot_default'], s['six_ready']), ('0', '0'))
 
         tx = six_work / 'transactions/t-11111111-1700000000-AbCdEf'
         tx.mkdir(parents=True)

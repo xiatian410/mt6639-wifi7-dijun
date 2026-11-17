@@ -30,6 +30,15 @@ STATE_FILE=$WORK/state
 LOG=$WORK/control.log
 rc=0
 
+# Direct worker/UI starts must obey the same single-module reboot barrier.
+# Recovery and explicit stop remain available when the guard rejects a start.
+case "$OP" in
+    start|toggle|c02-24g)
+        [ -f "$MODDIR/bin/unified-guard.sh" ] && [ ! -L "$MODDIR/bin/unified-guard.sh" ] || {
+            echo 'REJECT unified_guard_unavailable' >&2; exit 69; }
+        sh "$MODDIR/bin/unified-guard.sh" "$MODDIR" check || exit $? ;;
+esac
+
 # This entry can run independently of request_worker.sh. Validate before any
 # chmod, log, lock or session access; never follow an inherited work symlink.
 work_parent=${WORK%/*}

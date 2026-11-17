@@ -3,6 +3,10 @@
 # checksummed build-time template. Never rewrite SHA256SUMS at runtime.
 set -eu
 MODDIR=${1:-/data/adb/modules/mt6639-6g}
+. "$MODDIR/bin/owner.sh"
+if [ "$MODULE_EMBEDDED" = 1 ]; then
+    exec sh "$MODULE_OWNER/bin/verify-module.sh" "$MODULE_OWNER"
+fi
 cd "$MODDIR"
 for file in module.prop module.prop.template SHA256SUMS; do
     [ -f "$file" ] && [ ! -L "$file" ] || exit 3

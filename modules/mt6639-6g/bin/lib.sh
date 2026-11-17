@@ -3,6 +3,7 @@
 # 只允许操作本模块自有目录与 /odm/firmware/wifi.cfg 的临时 bind 覆盖。
 
 MODDIR=${MODDIR:-/data/adb/modules/mt6639-6g}
+. "$MODDIR/bin/owner.sh"
 WORK=${WORK:-/data/adb/mt6639-6g}
 LOG=${LOG:-$WORK/apply.log}
 STATE=${STATE:-$WORK/state}

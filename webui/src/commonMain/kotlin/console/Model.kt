@@ -10,7 +10,7 @@ const val STATUS_SCHEMA = "mt6639-radio-status-v1"
  * test compares this list with what the script really prints.
  */
 val STATUS_KEYS: List<String> = listOf(
-    "schema", "mode", "boot", "busy",
+    "schema", "mode", "boot", "busy", "unified_ready", "unified_reason",
     "six_module", "six_version", "six_status_rc", "six_state", "six_tx", "six_guardian",
     "six_profile", "six_compat_error", "six_boot_default", "six_ready", "six_card",
     "hotspot_module", "hotspot_version", "hotspot_status_rc", "hotspot_state",
@@ -68,6 +68,8 @@ data class RadioStatus(
     val prefWidth: Int,
     /** Null means the width-dependent default; custom names are validated UTF-8. */
     val customSsid: String? = null,
+    val unifiedReady: Boolean = false,
+    val unifiedReason: String = "unified_status_missing",
 ) {
     /** The one-tap state: a 6GHz hotspot that the controller confirmed or published. */
     val hotspotOn: Boolean get() = hotspotState == HotspotState.Active
@@ -173,6 +175,8 @@ fun parseStatus(text: String): RadioStatus? {
         sessionOwns6g = f["session_owns_6g"] == "1",
         prefWidth = f["pref_width"]?.toIntOrNull()?.takeIf { it in WIDTHS } ?: 20,
         customSsid = customSsid,
+        unifiedReady = f["unified_ready"] == "1",
+        unifiedReason = f["unified_reason"] ?: "unified_status_missing",
     )
 }
 

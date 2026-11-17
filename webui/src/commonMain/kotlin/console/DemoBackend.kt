@@ -197,8 +197,10 @@ class DemoBackend(
         out("mode=${if (full) "full" else "light"}")
         out("boot=00000000-0000-4000-8000-000000000000")
         out("busy=0")
+        out("unified_ready=1")
+        out("unified_reason=none")
         out("six_module=$sixModule")
-        out("six_version=${if (sixModule == "missing") "unknown" else "v0.3.3-dijun.1"}")
+        out("six_version=${if (sixModule == "missing") "unknown" else "v0.4.0-dijun.1"}")
         if (sixModule != "missing") {
             out("six_status_rc=0")
             out("six_state=${if (sixActive) "active" else "restored"}")
@@ -206,7 +208,7 @@ class DemoBackend(
             out("six_guardian=${if (sixActive) "alive" else "none"}")
             out("six_profile=demo")
             out("six_compat_error=none")
-            out("six_boot_default=1")
+            out("six_boot_default=0")
             out("six_ready=${if (sixActive) 1 else 0}")
             out(
                 "six_card=" + if (sixActive) {
@@ -219,7 +221,7 @@ class DemoBackend(
             )
         }
         out("hotspot_module=present")
-        out("hotspot_version=v0.3.0-dijun.1")
+        out("hotspot_version=v0.4.0-dijun.1")
         if (full) {
             out("hotspot_status_rc=0")
             out("hotspot_state=$hotspot")
