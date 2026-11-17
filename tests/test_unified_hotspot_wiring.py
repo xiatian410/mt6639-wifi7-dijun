@@ -27,6 +27,7 @@ class UnifiedHotspotWiringTests(unittest.TestCase):
         self.script(self.bin / 'unified-guard.sh',
                     'echo guard >> "$CALLS"; echo "REJECT unified_reboot_required" >&2; exit "${GUARD_RC:-0}"')
         self.script(self.bin / 'status_snapshot.sh', 'echo snapshot >> "$CALLS"')
+        self.script(self.bin / 'control.sh', 'echo "control $2" >> "$CALLS"; exit "${RECONCILE_RC:-0}"')
         self.script(self.bin / 'request_worker.sh',
                     'echo "worker $2" >> "$CALLS"; exit "${WORKER_RC:-0}"')
         self.script(self.bin / 'radio-control.sh', 'echo "radio $2 ${3:-}" >> "$CALLS"')
@@ -54,7 +55,7 @@ class UnifiedHotspotWiringTests(unittest.TestCase):
     def test_service_verifies_guards_then_initializes_without_independent_six_start(self):
         r, calls = self.run_hook('service.sh')
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(calls, ['verify', 'guard', 'snapshot', 'worker start'])
+        self.assertEqual(calls, ['verify', 'guard', 'control reconcile', 'snapshot', 'worker start'])
         r, calls = self.run_hook('service.sh', AUTOSTART='1')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(calls[-1], 'radio start 80')
@@ -62,7 +63,8 @@ class UnifiedHotspotWiringTests(unittest.TestCase):
         self.assertEqual(r.returncode, 64)
         self.assertFalse(any(c.startswith(('radio ', 'six ')) for c in calls))
         for env, expected in [({'VERIFY_RC': '69'}, ['verify']),
-                              ({'GUARD_RC': '73'}, ['verify', 'guard'])]:
+                              ({'GUARD_RC': '73'}, ['verify', 'guard']),
+                              ({'RECONCILE_RC': '78'}, ['verify', 'guard', 'control reconcile'])]:
             r, calls = self.run_hook('service.sh', **env)
             self.assertNotEqual(r.returncode, 0)
             self.assertEqual(calls, expected)

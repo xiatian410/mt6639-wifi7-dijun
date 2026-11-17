@@ -279,6 +279,8 @@ class ModelTest {
         assertTrue("5180 MHz" in Messages.reason("sta_band_incompatible_with_6g", "upstream=wifi-any,sta_freq=5180"))
         assertFalse("{freq}" in Messages.reason("sta_band_incompatible_with_6g"))
         assertTrue("some_new_reason" in Messages.reason("some_new_reason"))
+        assertTrue("不等于配置未还原" in Messages.reason("recovery_network_not_ready"))
+        assertTrue("尚未判定整体恢复成功" in Messages.reason("recovery_network_not_ready"))
         for (reason in Messages.KNOWN_REASONS) {
             val text = Messages.reason(reason)
             assertFalse("{" in text, reason)

@@ -111,6 +111,7 @@ common_env
 sh "$MOD/bin/native.sh" "$MOD" apply >/dev/null 2>&1
 run_status=0; FAKE_RECOVER_RC=7 sh "$MOD/bin/native.sh" "$MOD" restore >"$TMP/out" 2>&1 || run_status=$?
 [ "$run_status" = 90 ] && [ -s "$WORK/active_tx" ] && [ "$(cat "$WORK/state")" = restore_failed ] &&
+    grep -q 'REJECT recovery_network_not_ready$' "$TMP/out" &&
     ok 'business-not-ready retains active recovery authority' || bad 'business-not-ready retains active recovery authority'
 
 echo

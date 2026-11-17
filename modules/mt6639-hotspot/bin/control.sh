@@ -47,6 +47,7 @@ work_parent=${WORK%/*}
 [ ! -L "$WORK" ] || exit 77
 if [ ! -e "$WORK" ]; then mkdir -m 0700 "$WORK" || exit 74; fi
 [ -d "$WORK" ] && [ "$(stat -c %u "$WORK")" = 0 ] || exit 77
+work_original_mode=$(stat -c %a "$WORK") || exit 77
 chmod 0700 "$WORK" || exit 74
 [ "$(stat -c %a "$WORK")" = 700 ] || exit 77
 log() {
@@ -120,6 +121,156 @@ same_boot() {
     [ ! -L "$BOOT_FILE" ] && [ -f "$BOOT_FILE" ] &&
         [ "$(cat "$BOOT_FILE" 2>/dev/null)" = "$(boot_id)" ]
 }
+# Cross-kernel retirement is evidence-only: never use the same_boot-gated
+# liveness helpers or execute a script from the obsolete task. Call only while
+# holding action.lock. Every unknown observation retains the authority.
+retirement_blocked() {
+    printf 'REJECT cross_boot_retirement_blocked detail=%s\n' "$1" >&2
+    return 78
+}
+retirement_dir_ok() {
+    [ -d "$1" ] && [ ! -L "$1" ] &&
+        [ "$(stat -c %u "$1")" = 0 ] && [ "$(stat -c %a "$1")" = 700 ]
+}
+retirement_file_ok() {
+    [ -f "$1" ] && [ ! -L "$1" ] &&
+        [ "$(stat -c %u "$1")" = 0 ] && [ "$(stat -c %a "$1")" = 600 ] &&
+        [ "$(stat -c %h "$1")" = 1 ]
+}
+retirement_uuid_ok() {
+    [ "${#1}" = 36 ] && printf '%s\n' "$1" |
+        grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+}
+retirement_no_processes() {
+    # A failed read (including a process exiting during inspection) is unknown,
+    # not proof of absence. The caller can retry; never inspect saved PIDs alone.
+    [ -d /proc/1 ] && [ -r /proc/1/cmdline ] || return 1
+    cr_seen=0
+    for cr_p in /proc/[0-9]*; do
+        [ -d "$cr_p" ] && [ -r "$cr_p/cmdline" ] || return 1
+        cr_cmd=$(timeout 2 tr '\000' ' ' < "$cr_p/cmdline" 2>/dev/null) || return 1
+        cr_seen=1
+        case "$cr_cmd" in
+            *softap_native_once.sh*|*hostapd*|*"$cr_task"*) return 1 ;;
+        esac
+        if cr_exe=$(timeout 2 readlink "$cr_p/exe" 2>/dev/null); then
+            case "$cr_exe" in *hostapd*|*"$cr_task"*) return 1 ;; esac
+        else
+            # Only a positively identified kernel thread may lack an executable
+            # and command line. Zombies/read failures are unknown, so retry later.
+            [ -z "$cr_cmd" ] || return 1
+            cr_flags=$(timeout 2 awk '{ sub(/^.*\) /, ""); print $7 }' "$cr_p/stat") || return 1
+            case "$cr_flags" in ''|*[!0-9]*) return 1 ;; esac
+            [ "$((cr_flags & 2097152))" != 0 ] || return 1
+        fi
+    done
+    [ "$cr_seen" = 1 ]
+}
+retirement_tether_idle() {
+    # Capture status independently: a failing dumpsys that prints an idle line
+    # must not be accepted. Require both known idle fields exactly once; reject
+    # mtap traces, serving states, malformed/contradictory fields and errors.
+    cr_tether=$(timeout 5 dumpsys tethering --short 2>/dev/null) || return 1
+    printf '%s\n' "$cr_tether" | awk '
+        /mtap|TetheredState|LocalHotspotState/ { bad=1 }
+        /[Ee][Rr][Rr][Oo][Rr]|[Ee]xception|[Ff]ailure|[Dd]enied/ { bad=1 }
+        /Upstream wanted:/ {
+            if ($0 ~ /^[[:space:]]*Upstream wanted: false$/) wanted++
+            else bad=1
+        }
+        /Current upstream interface\(s\):/ {
+            if ($0 ~ /^[[:space:]]*Current upstream interface\(s\): null$/) upstream++
+            else bad=1
+        }
+        END { exit !(wanted == 1 && upstream == 1 && !bad) }
+    '
+}
+retire_cross_boot_session() {
+    [ "$work_original_mode" = 700 ] && retirement_dir_ok "$WORK" &&
+        retirement_dir_ok "$SESSION" || { retirement_blocked authority_directory; return 78; }
+    # Preserve even unknown extra records, but do not move links or special files
+    # into history. All authority files must have remained private.
+    for cr_f in "$SESSION"/* "$SESSION"/.[!.]* "$SESSION"/..?*; do
+        [ -e "$cr_f" ] || [ -L "$cr_f" ] || continue
+        retirement_file_ok "$cr_f" || { retirement_blocked authority_file; return 78; }
+    done
+    retirement_file_ok "$BOOT_FILE" && retirement_file_ok "$TASK_FILE" || {
+        retirement_blocked missing_authority; return 78; }
+    cr_old_boot=$(cat "$BOOT_FILE") && cr_boot=$(boot_id) &&
+        retirement_uuid_ok "$cr_old_boot" && retirement_uuid_ok "$cr_boot" || {
+        retirement_blocked boot_invalid; return 78; }
+    [ "$cr_old_boot" != "$cr_boot" ] || { retirement_blocked same_boot; return 78; }
+    cr_task=$(cat "$TASK_FILE") || { retirement_blocked task_unreadable; return 78; }
+    case "$cr_task" in
+        /data/local/tmp/mt6639-native-ap-?*) ;;
+        *) retirement_blocked task_invalid; return 78 ;;
+    esac
+    cr_name=${cr_task#/data/local/tmp/}
+    case "$cr_name" in *[!a-zA-Z0-9_-]*) retirement_blocked task_invalid; return 78 ;; esac
+    # A reboot may remove /data/local/tmp tasks. Only their path is needed for
+    # process matching. Existing task directories must still be private, and
+    # none of their ancestors may redirect the authority through a symlink.
+    for cr_d in /data /data/local /data/local/tmp; do
+        [ -d "$cr_d" ] && [ ! -L "$cr_d" ] || { retirement_blocked task_parent; return 78; }
+    done
+    if [ -e "$cr_task" ] || [ -L "$cr_task" ]; then
+        retirement_dir_ok "$cr_task" || { retirement_blocked task_directory; return 78; }
+    fi
+    for cr_f in "$STATE_FILE" "$LOG"; do
+        if [ -e "$cr_f" ] || [ -L "$cr_f" ]; then
+            retirement_file_ok "$cr_f" || { retirement_blocked output_path; return 78; }
+        fi
+    done
+    if [ -e "$WORK/history" ] || [ -L "$WORK/history" ]; then
+        retirement_dir_ok "$WORK/history" || { retirement_blocked history_path; return 78; }
+    fi
+    # Successful enumeration, not a failed per-interface lookup, proves absence.
+    cr_links=$(timeout 5 ip -o link show 2>/dev/null) || {
+        retirement_blocked interface_query; return 78; }
+    printf '%s\n' "$cr_links" | awk '
+        !/^[0-9]+: [^:]+: / { bad=1 }
+        /^[0-9]+: mtap[^:]*:/ { bad=1 }
+        /^[0-9]+: lo: / { loopback=1 }
+        END { exit !(loopback && !bad) }
+    ' || { retirement_blocked interface_present_or_unknown; return 78; }
+    for cr_net in /sys/class/net/mtap*; do
+        [ ! -e "$cr_net" ] && [ ! -L "$cr_net" ] || {
+            retirement_blocked interface_present; return 78; }
+    done
+    retirement_no_processes || { retirement_blocked process_present_or_unknown; return 78; }
+    retirement_tether_idle || { retirement_blocked tether_active_or_unknown; return 78; }
+    # Rename the entire session into a newly reserved destination on the same
+    # filesystem. No copy-and-delete, no task/key cleanup, no overwritten history.
+    if [ ! -e "$WORK/history" ]; then
+        mkdir -m 0700 "$WORK/history" || return 74
+    fi
+    cr_session_dev=$(stat -c %d "$SESSION") &&
+        cr_history_dev=$(stat -c %d "$WORK/history") &&
+        [ -n "$cr_session_dev" ] && [ "$cr_session_dev" = "$cr_history_dev" ] || return 74
+    cr_archive=$(mktemp -d "$WORK/history/cross-boot.XXXXXXXX") || return 74
+    cr_state=$(mktemp "$WORK/.retired-state.XXXXXXXX") || return 74
+    if ! printf '%s\n' idle > "$cr_state" ||
+        ! mv "$SESSION" "$cr_archive/session"; then
+        rm -f "$cr_state"
+        return 74
+    fi
+    if ! mv -f "$cr_state" "$STATE_FILE"; then
+        # Keep explicit stop/reconcile retryable if local state publication fails.
+        # Even if rollback itself fails, the complete authority remains archived.
+        mv "$cr_archive/session" "$SESSION" || {
+            printf '%s\n' 'REJECT cross_boot_retirement_blocked detail=archive_rollback_failed' >&2
+        }
+        rm -f "$cr_state"
+        return 74
+    fi
+    publish_status idle none none || true
+    printf '%s\n' 'state=idle retired=1 reason=cross_boot_session_retired'
+}
+reconcile_session() {
+    [ -e "$SESSION" ] || [ -L "$SESSION" ] || return 0
+    retire_cross_boot_session
+}
+
 clear_session() {
     [ ! -L "$SESSION" ] && { [ ! -e "$SESSION" ] || [ -d "$SESSION" ]; } || return 1
     if [ -d "$SESSION" ]; then
@@ -190,6 +341,16 @@ retry_checked_recovery() {
 }
 
 stop_session() {
+    if [ -e "$SESSION" ] || [ -L "$SESSION" ]; then
+        [ -d "$SESSION" ] && [ ! -L "$SESSION" ] || {
+            retirement_blocked authority_directory; return 78; }
+        cr_current_boot=$(boot_id) && retirement_uuid_ok "$cr_current_boot" || {
+            retirement_blocked boot_invalid; return 78; }
+        if ! same_boot; then
+            retire_cross_boot_session
+            return $?
+        fi
+    fi
     if task=$(session_task); then
         :
     else
@@ -523,23 +684,30 @@ status() {
 }
 
 action_lock() {
-    exec 7>"$WORK/action.lock" || return 70
+    if [ -e "$WORK/action.lock" ] || [ -L "$WORK/action.lock" ]; then
+        retirement_file_ok "$WORK/action.lock" || return 77
+    fi
+    exec 7>>"$WORK/action.lock" || return 70
     flock -n 7 7>&7 || return 75
 }
 
 case "$OP" in
-    start|stop|recover|toggle|c02-24g)
+    start|stop|recover|toggle|c02-24g|reconcile)
         if action_lock; then
             :
         else
             lock_rc=$?
-            log 'REJECT action_busy'
+            printf '%s\n' 'REJECT action_busy' >&2
             exit "$lock_rc"
         fi
         ;;
 esac
 
 case "$OP" in
+    reconcile)
+        reconcile_session
+        rc=$?
+        ;;
     status)
         status
         rc=$?
@@ -580,7 +748,7 @@ case "$OP" in
         rc=$?
         [ "$rc" = 0 ] || publish_status unresolved "${ARG_BAND:-none}" "${ARG_WIDTH:-none}" || true
         ;;
-    *) echo 'usage: control.sh MODDIR status|start|stop|recover|toggle [5g|6g WIDTH]|c02-24g' >&2; exit 64 ;;
+    *) echo 'usage: control.sh MODDIR status|reconcile|start|stop|recover|toggle [5g|6g WIDTH]|c02-24g' >&2; exit 64 ;;
 esac
 case "$OP" in
     start|stop|recover|toggle|c02-24g)

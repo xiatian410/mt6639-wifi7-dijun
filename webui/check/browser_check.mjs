@@ -50,11 +50,11 @@ const ksuMock = () => {
     'schema=mt6639-radio-status-v1', `mode=${full ? 'full' : 'light'}`,
     'boot=11111111-1111-4111-8111-111111111111', 'busy=0', 'six_module=present',
     `unified_ready=${blocked ? 0 : 1}`, `unified_reason=${blocked ? 'unified_reboot_required' : 'none'}`,
-    'six_version=v0.4.0-dijun.1', 'six_status_rc=0', `six_state=${state.six ? 'active' : 'restored'}`,
+    'six_version=v0.4.1-dijun.1', 'six_status_rc=0', `six_state=${state.six ? 'active' : 'restored'}`,
     `six_tx=${state.six ? 'present' : 'none'}`, `six_guardian=${state.six ? 'alive' : 'none'}`,
     'six_profile=os4-g284297', 'six_compat_error=none', 'six_boot_default=0', `six_ready=${state.six ? 1 : 0}`,
     'six_card=[事务运行] 适配：os4-g284297 | 内核：匹配 | 驱动：匹配 | 配置：临时配置 | 事务：运行 | 6GHz：60个已注册信道 | 连接：未连接 | 更新：12:34:56。信道注册不代表业务通过。',
-    'hotspot_module=present', 'hotspot_version=v0.4.0-dijun.1',
+    'hotspot_module=present', 'hotspot_version=v0.4.1-dijun.1',
     ...(full ? ['hotspot_status_rc=0', `hotspot_state=${state.hotspot}`,
       `hotspot_freq=${state.hotspot === 'active' ? 6135 : 'none'}`,
       `hotspot_channel=${state.hotspot === 'active' ? 37 : 'none'}`] : [`hotspot_state=${state.hotspot}`]),
@@ -86,6 +86,12 @@ const ksuMock = () => {
     if (args[0] === 'start') {
       state.hotspot = 'active'; state.width = Number(args[1]);
       return { out: ['phase=preflight', 'phase=hotspot_start', 'phase=verify', 'result=ok'], code: 0, slow: 600 };
+    }
+    if (args[0] === 'stop' && new URLSearchParams(location.search).get('fail') === 'network') {
+      state.hotspot = 'idle';
+      return { out: ['phase=hotspot_stop', 'phase=six_restore',
+        'REJECT recovery_network_not_ready',
+        'result=failed step=six_restore reason=recovery_network_not_ready detail=none rc=90'], code: 90 };
     }
     if (args[0] === 'stop') { state.hotspot = 'idle'; return { out: ['phase=hotspot_stop', 'result=ok'], code: 0, slow: 400 }; }
     if (args[0] === 'set-width') { state.pref = Number(args[1]); return { out: ['result=ok'], code: 0 }; }
@@ -137,6 +143,11 @@ const scenarios = {
     query: '', scheme: 'light', ksu: true,
     steps: [['tap', 359, 141], ['wait', 900], ['shot', 'running'], ['wait', 3200], ['shot', 'started'],
       ['sent', ' start 80'], ['tap', 359, 141], ['wait', 1800], ['shot', 'stopped'], ['sent', ' stop']],
+  },
+  ksu_network: {
+    query: '?fail=network', scheme: 'light', ksu: true,
+    steps: [['tap', 359, 141], ['wait', 4200], ['sent', ' start 80'],
+      ['tap', 359, 141], ['wait', 1600], ['sent', ' stop'], ['shot', 'readiness_dialog']],
   },
   ksu_fail: {
     query: '?fail=start', scheme: 'dark', ksu: true,

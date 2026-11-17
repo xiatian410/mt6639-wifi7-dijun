@@ -326,6 +326,12 @@ cmd_restore() {
     if [ "$rc" != 0 ]; then
         echo restore_failed >"$STATE"
         log "FAIL native_recover rc=$rc output=$out"
+        # rc7 is post-restoration association/IPv4 readiness, not an initial
+        # prerequisite for restoring mounts. Keep authority and failure status;
+        # expose the distinction without claiming full recovery or reconnecting.
+        if [ "$rc" = 7 ]; then
+            log 'REJECT recovery_network_not_ready'
+        fi
         return 90
     fi
     require_identity && require_unmounted || {

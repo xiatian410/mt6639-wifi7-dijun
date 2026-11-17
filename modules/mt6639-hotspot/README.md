@@ -1,12 +1,16 @@
 # MT6639 Native EHT Hotspot
 
-当前源码版本为 **v0.4.0-dijun.1 / code37**：一个 ZIP、一个 `mt6639-hotspot` 模块 ID，内含 6GHz 后端、热点与 WebUI，无需另装 6GHz 模块。保留可编辑热点名称和触摸滚动修复。以下保留的 v0.3.0-dijun.1 / code35 及 v0.2.26-dijun.1 / code34 说明仍适用。原生热点不再按旧 OTA fingerprint 拒绝已核对内核/驱动；蜂窝和普通 Wi-Fi 上游不再强制提供实验网络恢复口令。修复 v0.2.24 安装后完整性检查拒绝：KernelSU 在安装结束时删除 `customize.sh`，它不应出现在运行时的 `SHA256SUMS` 中。其余静态脚本、原生程序、DEX 和元数据模板仍校验；动态描述更新方式不变。请安装新构建包，不要在设备上重生成校验清单或绕过校验。本次未验证实机热点启动或客户端联网。
+当前源码版本为 **v0.4.1-dijun.1 / code38**：一个 ZIP、一个 `mt6639-hotspot` 模块 ID，内含 6GHz 后端、热点与 WebUI，无需另装 6GHz 模块。保留可编辑热点名称和触摸滚动修复。以下保留的 v0.3.0-dijun.1 / code35 及 v0.2.26-dijun.1 / code34 说明仍适用。原生热点不再按旧 OTA fingerprint 拒绝已核对内核/驱动；蜂窝和普通 Wi-Fi 上游不再强制提供实验网络恢复口令。修复 v0.2.24 安装后完整性检查拒绝：KernelSU 在安装结束时删除 `customize.sh`，它不应出现在运行时的 `SHA256SUMS` 中。其余静态脚本、原生程序、DEX 和元数据模板仍校验；动态描述更新方式不变。请安装新构建包，不要在设备上重生成校验清单或绕过校验。本次未验证实机热点启动或客户端联网。
 
 ## 二合一安装与控制（v0.4.0-dijun.1）
 
 `bin/radio-control.sh` 把「启用 6GHz」和「启动 6GHz 热点」合成一个入口，模块的「操作」按钮与 WebUI 控制台都走它。它自己不改无线状态：每一步仍然调用内置 `six/bin/control.sh` 与热点 `bin/control.sh`，两边原有的锁、校验、恢复逻辑照旧是最终裁决；它只负责排序、在已知必然失败时提前拒绝，以及把自己启用的 6GHz 还回去。
 
 **v0.4.0 起是安装二合一，不是两个模块的快捷入口。** 唯一模块根目录为 `/data/adb/modules/mt6639-hotspot`；`six/` 只是内部后端目录，没有第二份模块元数据、service 或 uninstall。原生程序已用 Android NDK r27c 重编，固定检查热点模块的生命周期。事务工作目录仍保留 `/data/adb/mt6639-6g`，避免丢失旧恢复记录，它不是需要安装的另一个模块。
+
+### v0.4.1：跨启动会话退役
+
+开机服务先调用持有热点 `action.lock` 的 `control.sh reconcile`。只有会话中的合法 boot UUID 与当前启动不同，记录路径安全，而且接口、相关进程和 tethering 检查均证明无活动残留时，才将整个旧会话目录原子移入私有 `history/` 并标记 idle。显式停止也使用同一检查，允许旧任务目录已随重启消失；不会执行旧任务脚本、按旧 PID 杀进程或切换 WLAN。检查失败、状态未知、锁被占用或归档失败时保留记录并拒绝退役；开机服务不会继续覆盖为 idle。同一 boot 的会话仍使用原有受控停止/恢复，不因软重启而自动丢弃。若开机时系统 tethering 服务尚不可读，本次开机自检会保守退出，不启动请求 worker；系统就绪后可从 WebUI 显式停止重试，不自动循环或连接网络。
 
 ### 从旧双模块迁移
 
@@ -37,6 +41,8 @@ echo "$HEX" | sh /data/adb/modules/mt6639-hotspot/bin/radio-key.sh /data/adb/mod
 **提前拒绝（不产生任何无线变更）。** 模块缺失/禁用/待移除、非 Enforcing、`ap.key` 缺失或权限不对、完整性校验失败、设备/SDK/内核/驱动不在已核对组合内、系统共享正在使用、`mtap0` 已存在、热点不是空闲、6GHz 事务需要先恢复、Wi-Fi 关闭、STA 连接在 2.4/5GHz（本驱动会把 6GHz AP 挪到 STA 信道，runner 本来也拒绝）、蜂窝模式下 10 秒内没有蜂窝 IPv4 地址。这些都是热点或 6GHz 控制器自己的门槛，放到前面只是避免「先重启一次 Wi-Fi 启用 6GHz、再失败、再重启一次还回去」。
 
 **归还规则。** 只有本控制器启用的那个 6GHz 事务才会在「一键关闭」时恢复。记录在 `/data/adb/mt6639-radio/session`（root、0600），包含 boot ID 与事务路径；只有 boot 相同且当前事务路径与记录一致才执行恢复。上一次启动留下的记录直接丢弃，格式不对的记录改名为 `session.invalid.*` 保留，两者都不会被用来关闭 6GHz。用户自己用 6GHz 开关启用的事务不记为归属，关闭热点后保持开启。恢复失败时记录保留，再次「关闭」可以接着完成。
+
+**恢复与联网是两个结果。** 原生 `network_not_ready`（rc7）发生在挂载恢复和 WLAN 设置恢复之后，表示等待关联或 IPv4 未通过，不是恢复前的联网门槛。外层仍返回失败并保留事务权限，不据此宣称整体恢复成功；WebUI 会显示 `recovery_network_not_ready` 的区别说明。该提示不会自动连接已保存网络、改变上游配置或清除记录。
 
 **单独的 6GHz 开关。** `six-off` 与 `six-refresh` 会重启 Wi-Fi，所以要求热点空闲，否则返回 `hotspot_active`。
 
@@ -70,7 +76,7 @@ sh tools/build_hotspot_module.sh \
   /path/to/native-tether.dex \
   /path/to/softap-profile.dex \
   /path/to/delete_ifindex \
-  /tmp/mt6639-hotspot-v0.4.0-dijun.1.zip \
+  /tmp/mt6639-hotspot-v0.4.1-dijun.1.zip \
   /tmp/mt6639-webroot \
   /tmp/mt6639-native/mount-txn
 ```

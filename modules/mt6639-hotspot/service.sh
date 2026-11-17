@@ -9,6 +9,9 @@ sh "$MODDIR/bin/verify-module.sh" "$MODDIR" || exit $?
 sh "$MODDIR/bin/unified-guard.sh" "$MODDIR" check || exit $?
 [ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ] || exit 73
 . "$MODDIR/config.conf"
+# Retire only proven-idle prior-kernel sessions, under the controller's lock.
+# Failure must not initialize a misleading idle snapshot or start the worker.
+sh "$MODDIR/bin/control.sh" "$MODDIR" reconcile || exit $?
 # Publish a current-boot read-only snapshot even when automatic start is off.
 sh "$MODDIR/bin/status_snapshot.sh" "$MODDIR" init >/dev/null 2>&1 || exit $?
 if [ "${ENABLE_SETTINGS_BRIDGE:-1}" = 1 ]; then

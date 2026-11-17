@@ -200,7 +200,7 @@ class DemoBackend(
         out("unified_ready=1")
         out("unified_reason=none")
         out("six_module=$sixModule")
-        out("six_version=${if (sixModule == "missing") "unknown" else "v0.4.0-dijun.1"}")
+        out("six_version=${if (sixModule == "missing") "unknown" else "v0.4.1-dijun.1"}")
         if (sixModule != "missing") {
             out("six_status_rc=0")
             out("six_state=${if (sixActive) "active" else "restored"}")
@@ -221,7 +221,7 @@ class DemoBackend(
             )
         }
         out("hotspot_module=present")
-        out("hotspot_version=v0.4.0-dijun.1")
+        out("hotspot_version=v0.4.1-dijun.1")
         if (full) {
             out("hotspot_status_rc=0")
             out("hotspot_state=$hotspot")

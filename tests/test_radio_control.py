@@ -731,6 +731,15 @@ class RadioControlTests(RadioFixture):
         self.assertEqual(self.calls()[2:], ['hotspot stop', 'six disable', 'six disable'])
         self.assertIsNone(self.record())
 
+    def test_network_readiness_failure_is_specific_and_retains_ownership(self):
+        self.assertEqual(self.run_op('start').returncode, 0)
+        (self.fix / 'six.disable_rc').write_text('90\n')
+        (self.fix / 'six.disable_out').write_text('[ts] REJECT recovery_network_not_ready\n')
+        r = self.run_op('stop')
+        self.assertEqual(r.returncode, 90, r.stdout + r.stderr)
+        self.assertEqual(self.result(r)['reason'], 'recovery_network_not_ready')
+        self.assertEqual(self.record()['owns_6g'], '1')
+
     def test_hotspot_stop_failure_leaves_6ghz_and_the_record_alone(self):
         self.assertEqual(self.run_op('start').returncode, 0)
         (self.fix / 'hot.stop_rc').write_text('73\n')
