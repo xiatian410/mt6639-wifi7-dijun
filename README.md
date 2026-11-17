@@ -1,4 +1,42 @@
-# MT6639 / Xiaomi 15S Pro（Dijun）Wi‑Fi 与蓝牙能力研究
+# MT6639 热点 + 6GHz 二合一源码分支
+
+此分支 `hotspot-6ghz-standalone` 独立于 `main`，基于已发布的 **v0.4.2-dijun.1**（`66c931138c13f2319a3d11f9ab6e93ab2d087291`）。它保留完整仓库历史、构建依赖、测试、研究依据与许可证，不是只复制两个模块目录的残缺源码包；其他历史研究目录仍保留，但不参与二合一 ZIP 的打包。
+
+## 二合一源码入口
+
+| 内容 | 路径 |
+| --- | --- |
+| 唯一安装模块、热点控制与恢复 | [modules/mt6639-hotspot](modules/mt6639-hotspot/) |
+| 内置 6GHz 后端共享源码 | [modules/mt6639-6g](modules/mt6639-6g/) |
+| Android 原生恢复事务与 AP 停止屏障 | [native/recovery](native/recovery/) |
+| Miuix Kotlin/Wasm WebUI | [webui](webui/) |
+| hostapd、netdev、framework 等相关源码 | [native](native/) |
+| 构建与运行脚本 | [tools](tools/) |
+| 离线测试 | [tests](tests/) |
+
+**安装仍只有一个 `mt6639-hotspot` 模块。** 构建器将共享 6GHz 后端嵌入 `six/`，不打包第二份模块元数据或生命周期入口。源码目录的拆分不意味着需要独立安装 6GHz 模块。
+
+## 获取与构建
+
+```sh
+git clone --branch hotspot-6ghz-standalone --single-branch \
+  https://github.com/xiatian410/mt6639-wifi7-dijun.git
+cd mt6639-wifi7-dijun
+```
+
+完整构建步骤、工具链要求和旧模块迁移见 [模块构建说明](modules/mt6639-hotspot/README.md#webui-构建与安装)。主要入口为 `tools/build_mount_txn.sh`、`tools/build_webui.sh` 和 `tools/build_hotspot_module.sh`。构建时将输出 ZIP 名称设为 `mt6639-hotspot-v0.4.2-dijun.1.zip`。
+
+本分支包含项目源码，不包含预编译原生程序、DEX、ZIP、原厂驱动或固件。构建仍需要文档指定的 NDK、JDK、Gradle、字体、外部依赖与固定哈希的热点构建输入；不是无需依赖即可离线编译的 SDK。源码 ZIP 也不能直接作为 KernelSU 模块安装。
+
+- [完整可安装 v0.4.2 ZIP](https://github.com/xiatian410/mt6639-wifi7-dijun/releases/download/v0.4.2-dijun.1/mt6639-hotspot-v0.4.2-dijun.1.zip)
+- [本分支源码 ZIP](https://github.com/xiatian410/mt6639-wifi7-dijun/archive/refs/heads/hotspot-6ghz-standalone.zip)
+- 原作者署名与 [GPL-3.0 许可证](LICENSE) 保留；第三方许可按各组件原文件。
+
+离线夹具通过不代表 Android 真机无线或客户端联网验收。后续 `main` 的修改不会自动进入本分支，需要显式合并或挑选提交。
+
+---
+
+# 原研究仓库说明（历史内容）
 
 ## 本 fork 当前维护
 
