@@ -141,14 +141,26 @@ retirement_uuid_ok() {
     [ "${#1}" = 36 ] && printf '%s\n' "$1" |
         grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 }
+retirement_process_gone() {
+    # Only disappearance of the entire PID entry excuses a failed read. A
+    # missing child file, permission failure or PID reuse remains unknown.
+    [ -d /proc/1 ] && [ -r /proc/1/cmdline ] &&
+        [ ! -e "$cr_p" ] && [ ! -L "$cr_p" ]
+}
 retirement_no_processes() {
-    # A failed read (including a process exiting during inspection) is unknown,
-    # not proof of absence. The caller can retry; never inspect saved PIDs alone.
+    # /proc enumeration is not a snapshot: short-lived processes (including
+    # inspection helpers) may exit between glob expansion and any later read.
     [ -d /proc/1 ] && [ -r /proc/1/cmdline ] || return 1
     cr_seen=0
     for cr_p in /proc/[0-9]*; do
-        [ -d "$cr_p" ] && [ -r "$cr_p/cmdline" ] || return 1
-        cr_cmd=$(timeout 2 tr '\000' ' ' < "$cr_p/cmdline" 2>/dev/null) || return 1
+        if [ ! -d "$cr_p" ] || [ ! -r "$cr_p/cmdline" ]; then
+            retirement_process_gone && continue
+            return 1
+        fi
+        if ! cr_cmd=$( { timeout 2 tr '\000' ' ' < "$cr_p/cmdline"; } 2>/dev/null); then
+            retirement_process_gone && continue
+            return 1
+        fi
         cr_seen=1
         case "$cr_cmd" in
             *softap_native_once.sh*|*hostapd*|*"$cr_task"*) return 1 ;;
@@ -156,10 +168,14 @@ retirement_no_processes() {
         if cr_exe=$(timeout 2 readlink "$cr_p/exe" 2>/dev/null); then
             case "$cr_exe" in *hostapd*|*"$cr_task"*) return 1 ;; esac
         else
+            retirement_process_gone && continue
             # Only a positively identified kernel thread may lack an executable
-            # and command line. Zombies/read failures are unknown, so retry later.
+            # and command line. Existing zombies/read failures remain unknown.
             [ -z "$cr_cmd" ] || return 1
-            cr_flags=$(timeout 2 awk '{ sub(/^.*\) /, ""); print $7 }' "$cr_p/stat") || return 1
+            if ! cr_flags=$(timeout 2 awk '{ sub(/^.*\) /, ""); print $7 }' "$cr_p/stat" 2>/dev/null); then
+                retirement_process_gone && continue
+                return 1
+            fi
             case "$cr_flags" in ''|*[!0-9]*) return 1 ;; esac
             [ "$((cr_flags & 2097152))" != 0 ] || return 1
         fi

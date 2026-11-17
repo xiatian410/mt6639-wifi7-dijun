@@ -288,6 +288,27 @@ exec {shutil.which('mv')} "$@"''')
         (process / 'stat').write_text('9876 (kernel worker) I 0 0 0 0 0 2097152\n')
         self.assertEqual(self.run_control().returncode, 0)
 
+    def test_process_exit_during_each_read_is_not_a_live_trace(self):
+        for stage in ('cmdline', 'exe', 'stat'):
+            with self.subTest(stage=stage):
+                p = self.proc / '4242'
+                p.mkdir()
+                (p / 'cmdline').write_bytes(b'')
+                # Remove only this synthetic proc entry at the selected read.
+                tool = {'cmdline': 'tr', 'exe': 'readlink', 'stat': 'awk'}[stage]
+                real = shutil.which(tool)
+                target = str(p / ('exe' if stage == 'exe' else 'stat'))
+                condition = '[ "$(readlink /proc/self/fd/0)" = "' + str(p / 'cmdline') + '" ]' if stage == 'cmdline' else '[ "$1" = "' + target + '" ]' if stage == 'exe' else '[ "$2" = "' + target + '" ]'
+                self.script(self.stub / tool, f'if {condition}; then rm -r "{p}"; exit 1; fi\nexec {real} "$@"')
+                r = self.run_control()
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertIn('retired=1', r.stdout)
+                self.assertNotIn("can\'t open", r.stderr)
+                archive = next(self.work.glob('history/*/session'))
+                archive.rename(self.session)
+                self.private(self.work / 'state', 'unresolved\n')
+                (self.stub / tool).unlink()
+
     def test_state_publish_failure_rolls_back_for_retry(self):
         self.assertEqual(self.run_control(STATE_FAIL='1').returncode, 74)
         self.assert_retained()
