@@ -1,6 +1,5 @@
 package console
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -116,7 +115,7 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                     item(key = "demo") { DemoBanner() }
                 }
                 val status = state.status
-                if (state.op != null && page != ConsolePage.Home) {
+                if (state.op != null) {
                     item(key = "operation") {
                         Section {
                             BasicComponent(title = "正在执行", summary = Messages.phase(state.op.phase))
@@ -126,6 +125,23 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                 }
                 when {
                     page == ConsolePage.About -> item(key = "about") { AboutCard(status) }
+                    page == ConsolePage.Diagnostics -> {
+                        if (status != null) {
+                            if (status.sixCard.isNotBlank()) {
+                                item(key = "six-detail") {
+                                    Section { BasicComponent(title = "6GHz 模块状态", summary = Presentation.cardText(status.sixCard)) }
+                                }
+                            }
+                            item(key = "conditions") { ConditionsCard(status) }
+                        } else if (state.loaded) {
+                            item(key = "problem") {
+                                ProblemCard(state.statusProblem.orEmpty()) { controller.refresh() }
+                            }
+                        } else {
+                            item(key = "loading") { LoadingCard() }
+                        }
+                        item(key = "more") { MoreCard(status, controller) }
+                    }
                     !state.loaded -> item(key = "loading") { LoadingCard() }
                     status == null -> item(key = "problem") {
                         ProblemCard(state.statusProblem.orEmpty()) { controller.refresh() }
@@ -133,9 +149,9 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                     else -> {
                         when (page) {
                             ConsolePage.Home -> {
-                                item(key = "overview") { OverviewCard(state, status) { page = ConsolePage.Diagnostics } }
                                 item(key = "hotspot") { HotspotCard(state, controller) }
                                 item(key = "six") { SixCard(state, status, controller) { confirmSixOff = true } }
+                                item(key = "overview") { OverviewCard(state, status) { page = ConsolePage.Diagnostics } }
                             }
                             ConsolePage.Settings -> {
                                 item(key = "settings") { SettingsCard(state, status, controller) { askKey = true } }
@@ -143,10 +159,7 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                                     Section { BasicComponent(title = "配置说明", summary = "关闭热点后修改参数，下次开启生效。6GHz 热点需客户端支持对应频段。") }
                                 }
                             }
-                            ConsolePage.Diagnostics -> {
-                                item(key = "conditions") { ConditionsCard(status) }
-                                item(key = "more") { MoreCard(status, controller) }
-                            }
+                            ConsolePage.Diagnostics -> Unit
                             ConsolePage.About -> Unit
                         }
                     }
@@ -266,22 +279,6 @@ private fun HotspotCard(state: ConsoleState, controller: ConsoleController) {
             onCheckedChange = { controller.setHotspot(it) },
             enabled = Presentation.hotspotEnabled(state),
         )
-        val op = state.op
-        AnimatedVisibility(visible = op != null && op.kind !in listOf(OpKind.SetWidth, OpKind.SetKey, OpKind.SetName)) {
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 16.dp),
-            ) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                Text(
-                    text = Messages.phase(op?.phase.orEmpty()),
-                    style = MiuixTheme.textStyles.footnote1,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
-            }
-        }
     }
 }
 
@@ -341,9 +338,6 @@ private fun SixCard(
             onCheckedChange = { on -> if (on) controller.setSix(true) else onConfirmOff() },
             enabled = Presentation.sixEnabled(state),
         )
-        if (status.sixCard.isNotBlank()) {
-            BasicComponent(title = "6GHz 模块状态", summary = Presentation.cardText(status.sixCard))
-        }
         ArrowPreference(
             title = "重新注册 6GHz",
             summary = "软重启后 6GHz 信道消失时使用，会重启一次 WLAN",
@@ -374,14 +368,14 @@ private fun ConditionsCard(status: RadioStatus) {
 }
 
 @Composable
-private fun MoreCard(status: RadioStatus, controller: ConsoleController) {
+private fun MoreCard(status: RadioStatus?, controller: ConsoleController) {
     Section(title = "其他") {
         ArrowPreference(
             title = "查看日志",
             summary = "合并控制、热点、6GHz 三份记录的末尾",
             onClick = { controller.openLogs() },
         )
-        BasicComponent(title = "版本", summary = Presentation.versions(status))
+        BasicComponent(title = "版本", summary = status?.let { Presentation.versions(it) } ?: "尚未读取设备状态")
     }
 }
 

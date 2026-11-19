@@ -114,6 +114,34 @@ run_status=0; FAKE_RECOVER_RC=7 sh "$MOD/bin/native.sh" "$MOD" restore >"$TMP/ou
     grep -q 'REJECT recovery_network_not_ready$' "$TMP/out" &&
     ok 'business-not-ready retains active recovery authority' || bad 'business-not-ready retains active recovery authority'
 
+# The local restore change must never replay an old kernel's native journal.
+for stock in yes no; do
+    common_env
+    printf '%s\n' 11111111-1111-4111-8111-111111111111 >"$TMP/boot"
+    sh "$MOD/bin/native.sh" "$MOD" apply >"$TMP/out" 2>&1
+    old_tx=$(cat "$WORK/active_tx")
+    printf '%s\n' 22222222-2222-4222-8222-222222222222 >"$TMP/boot"
+    export INIT_MOUNTINFO_FILE=$TMP/mountinfo INIT_CFG_PATH=$TMP/init.cfg
+    cp "$CFG" "$INIT_CFG_PATH"
+    [ "$stock" = yes ] || printf 'foreign\n' >"$INIT_CFG_PATH"
+    : >"$NATIVE_CALLS"
+    run_status=0
+    sh "$MOD/bin/native.sh" "$MOD" restore >"$TMP/out" 2>&1 || run_status=$?
+    if [ "$stock" = yes ]; then
+        [ "$run_status" = 0 ] && [ ! -s "$WORK/active_tx" ] &&
+            [ -d "$old_tx" ] && [ ! -s "$NATIVE_CALLS" ] &&
+            grep -q cross_boot_retired_stock "$TMP/out" &&
+            [ -n "$(find "$WORK/retired" -name wrapper-boot -type f)" ] &&
+            ok 'cross-boot restore archives authority only after stock verification' ||
+            bad 'cross-boot restore archives authority only after stock verification'
+    else
+        [ "$run_status" = 90 ] && [ -s "$WORK/active_tx" ] &&
+            [ -d "$old_tx" ] && [ ! -s "$NATIVE_CALLS" ] &&
+            ok 'cross-boot non-stock init config preserves authority without native replay' ||
+            bad 'cross-boot non-stock init config preserves authority without native replay'
+    fi
+done
+
 echo
 echo "RESULT pass=$pass fail=$fail"
 [ "$fail" = 0 ]

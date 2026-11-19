@@ -121,6 +121,7 @@ object Messages {
         "boot_id_unreadable" to "读不到本次开机的标识。",
         "usage_rejected" to "控制脚本不认识这条命令。控制台和脚本可能不是同一个版本，请重新安装本模块。",
         "no_result" to "操作结束了，但脚本没有给出结果。",
+        "exit_conflict" to "脚本输出与退出状态不一致，无法确认操作成功。请查看当前状态与日志。",
         "no_exit" to "等了很久也没有等到操作结束。状态已重新读取，请以页面显示为准。",
 
         // Network-name installer.

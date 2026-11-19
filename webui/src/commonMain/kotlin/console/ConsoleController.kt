@@ -1,6 +1,7 @@
 package console
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,8 +58,24 @@ class ConsoleController(
     private val _state = MutableStateFlow(ConsoleState(demo = backend.demo))
     val state: StateFlow<ConsoleState> get() = _state
     private val gate = Mutex()
+    private var refreshJob: Job? = null
+    private var logsJob: Job? = null
 
-    fun refresh(): Job = scope.launch { readStatus(full = true) }
+    // Repeated taps join the same read instead of delaying an operation behind
+    // a growing queue of full status checks.
+    fun refresh(): Job = refreshJob?.takeIf { it.isActive }
+        ?: scope.launch { readStatus(full = true) }.also { refreshJob = it }
+
+    private suspend fun runCommand(command: String, onLine: (Boolean, String) -> Unit): Int =
+        try {
+            backend.run(command, onLine)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Bridge exceptions must not leave an operation permanently busy.
+            // Do not echo exception messages: they may contain the command/key.
+            -1
+        }
 
     fun setHotspot(on: Boolean): Job? =
         if (on) {
@@ -98,7 +115,7 @@ class ConsoleController(
             val text = StringBuilder()
             val code = gate.withLock {
                 withTimeoutOrNull(statusTimeoutMs) {
-                    backend.run(Commands.LOGS) { _, line -> text.append(line).append('\n') }
+                    runCommand(Commands.LOGS) { _, line -> text.append(line).append('\n') }
                 }
             }
             val shown = when {
@@ -108,10 +125,14 @@ class ConsoleController(
             }
             // Closed while loading: stay closed.
             _state.update { if (it.logsLoading) it.copy(logs = shown, logsLoading = false) else it }
-        }
+        }.also { logsJob = it }
     }
 
-    fun closeLogs() = _state.update { it.copy(logs = null, logsLoading = false) }
+    fun closeLogs() {
+        logsJob?.cancel()
+        logsJob = null
+        _state.update { it.copy(logs = null, logsLoading = false) }
+    }
 
     /** Keeps the page current while it is visible. Never returns. */
     suspend fun poll(visible: () -> Boolean, intervalMs: Long = 6_000L, fullEvery: Int = 5) {
@@ -138,7 +159,7 @@ class ConsoleController(
                     return@withLock 73
                 }
                 withTimeoutOrNull(opTimeoutMs) {
-                    backend.run(command) { stderr, text ->
+                    runCommand(command) { stderr, text ->
                         lines += text
                         if (!stderr && text.startsWith("phase=")) {
                             val phase = text.substring(6)
@@ -178,7 +199,7 @@ class ConsoleController(
         val out = StringBuilder()
         val code = gate.withLock {
             withTimeoutOrNull(statusTimeoutMs) {
-                backend.run(if (full) Commands.STATUS_FULL else Commands.STATUS) { stderr, text ->
+                runCommand(if (full) Commands.STATUS_FULL else Commands.STATUS) { stderr, text ->
                     if (!stderr) out.append(text).append('\n')
                 }
             }

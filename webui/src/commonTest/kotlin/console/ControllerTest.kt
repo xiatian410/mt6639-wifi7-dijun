@@ -15,6 +15,70 @@ import kotlin.test.assertTrue
 /** The whole page logic against the simulated phone. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ControllerTest {
+    @Test
+    fun successMarkerCannotOverrideFailedExit() {
+        for (code in listOf(-1, 71, 90, 127)) {
+            val result = parseResult(listOf("result=ok"), code)
+            assertFalse(result.ok)
+            assertEquals(code, result.rc)
+            assertEquals("exit_conflict", result.reason)
+        }
+    }
+
+    @Test
+    fun repeatedRefreshTapsShareOneRead() = runTest {
+        val spy = Spy(DemoBackend("ready"))
+        val c = ConsoleController(spy, this)
+        val first = c.refresh()
+        repeat(20) { assertTrue(first === c.refresh()) }
+        first.join()
+        assertEquals(listOf(Commands.STATUS_FULL), spy.commands)
+    }
+
+    @Test
+    fun bridgeExceptionsDoNotLeaveBusyOrStaleState() = runTest {
+        val spy = Spy(DemoBackend("ready"))
+        val c = ConsoleController(spy, this)
+        c.refresh().join()
+        spy.override = { command, _ ->
+            if (!command.endsWith("status full")) error("sensitive command payload")
+            null
+        }
+        assertNotNull(c.setHotspot(true)).join()
+        assertNull(c.state.value.op)
+        assertNotNull(c.state.value.notice)
+        assertFalse(c.state.value.toString().contains("sensitive"))
+        spy.override = { _, _ -> error("bridge unavailable") }
+        c.refresh().join()
+        assertNull(c.state.value.status)
+        assertNotNull(c.state.value.statusProblem)
+        assertNotNull(c.openLogs()).join()
+        assertFalse(c.state.value.logsLoading)
+        assertTrue(assertNotNull(c.state.value.logs).startsWith("读不到日志"))
+        spy.override = null
+        c.refresh().join()
+        assertNotNull(c.state.value.status)
+    }
+
+    @Test
+    fun closingLogsCancelsOldReadBeforeReopening() = runTest {
+        val spy = Spy(DemoBackend("ready"))
+        val c = ConsoleController(spy, this)
+        spy.override = { command, _ ->
+            if (command == Commands.LOGS) kotlinx.coroutines.awaitCancellation() else null
+        }
+        val old = assertNotNull(c.openLogs())
+        runCurrent()
+        c.closeLogs()
+        old.join()
+        assertTrue(old.isCancelled)
+        assertNull(c.state.value.logs)
+        spy.override = null
+        assertNotNull(c.openLogs()).join()
+        assertTrue("=== radio ===" in assertNotNull(c.state.value.logs))
+        assertEquals(1, spy.maxRunning)
+    }
+
     /** Records every command and can replace an answer. */
     private class Spy(private val inner: Backend) : Backend {
         override val demo: Boolean get() = inner.demo

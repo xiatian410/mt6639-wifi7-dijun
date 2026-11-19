@@ -66,7 +66,7 @@ echo "$HEX" | sh /data/adb/modules/mt6639-hotspot/bin/radio-key.sh /data/adb/mod
 
 设置页可编辑热点网络名称：支持 UTF-8，最多 32 字节，拒绝控制字符和换行。名称以十六进制保存在 root 私有目录，运行中的 AP 不会被热改名；先停止热点、保存名称，再次启动时应用。未设置自定义名称时继续使用原有频段/带宽默认名；保存空名称会被拒绝。Web 控制台只把十六进制送入固定 setter，名称本身不会被解释为 shell 命令。
 
-在 Linux 构建主机安装 JDK 21、Gradle 9.x、Python 3 `fontTools`、Noto Sans CJK SC 字体及其许可文本；Gradle 首次构建还需访问 Maven Central 和 npm registry。完整干净构建（输出目录必须不存在）：
+在 Linux 构建主机安装 JDK 21、Gradle 9.x、Python 3 `fontTools`、Noto Sans CJK SC 字体及其许可文本；Gradle 首次构建还需访问 Maven Central 和 npm registry。字体目录必须包含 `NotoSansCJK-Regular.ttc`、`NotoSansCJK-Medium.ttc`、`NotoSansCJK-Bold.ttc`。Ubuntu 24.04 的基础 `fonts-noto-cjk` 包没有 Medium；可补装发行版的额外字重包，或从 Noto 官方来源取得 Medium 并与其余两份放入独立目录，通过 `MT6639_WEBUI_FONT_DIR` 指定。不要将 Regular 重命名冒充 Medium。构建记录会保存各输入字体哈希。完整干净构建（输出目录必须不存在）：
 
 ```sh
 # Android NDK r27c (27.2.12479018); unified is an explicit compile-time profile.
@@ -80,7 +80,7 @@ sh tools/build_hotspot_module.sh \
   /path/to/native-tether.dex \
   /path/to/softap-profile.dex \
   /path/to/delete_ifindex \
-  /tmp/mt6639-hotspot-v0.4.1-dijun.1.zip \
+  /tmp/mt6639-hotspot-v0.4.2-dijun.1.zip \
   /tmp/mt6639-webroot \
   /tmp/mt6639-native/mount-txn
 ```

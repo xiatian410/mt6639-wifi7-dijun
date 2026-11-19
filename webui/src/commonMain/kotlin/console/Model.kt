@@ -216,7 +216,8 @@ fun parseResult(lines: List<String>, exitCode: Int): OpResult {
             val i = it.indexOf('=')
             if (i <= 0) null else it.substring(0, i) to it.substring(i + 1)
         }.toMap()
-        if (f["result"] == "ok") return OpResult(true, "none", "none", "none", 0)
+        if (f["result"] == "ok" && exitCode == 0) return OpResult(true, "none", "none", "none", 0)
+        if (f["result"] == "ok") return OpResult(false, "command", "exit_conflict", "none", exitCode)
         return OpResult(
             ok = false,
             step = f["step"] ?: "none",

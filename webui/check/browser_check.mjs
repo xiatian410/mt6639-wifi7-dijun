@@ -50,11 +50,11 @@ const ksuMock = () => {
     'schema=mt6639-radio-status-v1', `mode=${full ? 'full' : 'light'}`,
     'boot=11111111-1111-4111-8111-111111111111', 'busy=0', 'six_module=present',
     `unified_ready=${blocked ? 0 : 1}`, `unified_reason=${blocked ? 'unified_reboot_required' : 'none'}`,
-    'six_version=v0.4.1-dijun.1', 'six_status_rc=0', `six_state=${state.six ? 'active' : 'restored'}`,
+    'six_version=v0.4.2-dijun.1', 'six_status_rc=0', `six_state=${state.six ? 'active' : 'restored'}`,
     `six_tx=${state.six ? 'present' : 'none'}`, `six_guardian=${state.six ? 'alive' : 'none'}`,
     'six_profile=os4-g284297', 'six_compat_error=none', 'six_boot_default=0', `six_ready=${state.six ? 1 : 0}`,
     'six_card=[事务运行] 适配：os4-g284297 | 内核：匹配 | 驱动：匹配 | 配置：临时配置 | 事务：运行 | 6GHz：60个已注册信道 | 连接：未连接 | 更新：12:34:56。信道注册不代表业务通过。',
-    'hotspot_module=present', 'hotspot_version=v0.4.1-dijun.1',
+    'hotspot_module=present', 'hotspot_version=v0.4.2-dijun.1',
     ...(full ? ['hotspot_status_rc=0', `hotspot_state=${state.hotspot}`,
       `hotspot_freq=${state.hotspot === 'active' ? 6135 : 'none'}`,
       `hotspot_channel=${state.hotspot === 'active' ? 37 : 'none'}`] : [`hotspot_state=${state.hotspot}`]),
@@ -73,6 +73,9 @@ const ksuMock = () => {
       const hex = command.split(' ')[1];
       if (hex) state.ssidHex = hex;
       return { out: [`ssid_hex=${state.ssidHex}`], code: 0 };
+    }
+    if (args[0] === 'status' && new URLSearchParams(location.search).get('fail') === 'status') {
+      return { out: [], code: 127 };
     }
     if (args[0] === 'status') return { out: status(args[1] === 'full'), code: 0 };
     if (args[0] === 'start' && failStart) {
@@ -133,6 +136,22 @@ const scenarios = {
   nosix: { query: '?demo=nosix', scheme: 'dark' },
   missing: { query: '?demo=missing', scheme: 'light' },
   ksu: { query: '', scheme: 'light', ksu: true },
+  navigation: {
+    query: '', scheme: 'light', ksu: true,
+    steps: [['tab', '配置'], ['shot', 'settings'], ['tab', '诊断'], ['shot', 'diagnostics'],
+      ['tab', '关于'], ['shot', 'about'], ['tab', '首页'], ['shot', 'home'], ['onlyReads']],
+  },
+  status_failure: {
+    query: '?fail=status', scheme: 'dark', ksu: true,
+    steps: [['tab', '诊断'], ['shot', 'diagnostics'], ['wheel', 900], ['wait', 500], ['shot', 'logs_entry'],
+      ['tab', '关于'], ['shot', 'about'], ['onlyReads']],
+  },
+  operation_navigation: {
+    query: '', scheme: 'light', ksu: true,
+    steps: [['tap', 359, 141], ['tab', '配置'], ['shot', 'busy'], ['tap', 200, 180],
+      ['wait', 4200], ['shot', 'active_settings'], ['neverSent', 'radio-name.sh'],
+      ['sent', ' start 80'], ['tab', '首页'], ['tap', 359, 141], ['wait', 1800], ['sent', ' stop']],
+  },
   // Interactions. Coordinates are CSS pixels in the 412x892 phone viewport.
   ksu_migration: {
     query: '?migration=blocked', scheme: 'light', ksu: true,
@@ -156,7 +175,7 @@ const scenarios = {
   ksu_name: {
     query: '', scheme: 'light', ksu: true,
     steps: [
-      ['tap', 200, 304], ['wait', 800], ['shot', 'name_dialog'],
+      ['tab', '配置'], ['tap', 200, 180], ['wait', 800], ['shot', 'name_dialog'],
       ['tap', 200, 740], ['press', 'ControlOrMeta+A'], ['insert', 'Lab 演示'], ['wait', 200],
       ['shot', 'name_valid'], ['tap', 296, 830], ['wait', 1200],
       ['shot', 'name_saved'],
@@ -167,12 +186,12 @@ const scenarios = {
   ksu_name_active: {
     query: '', scheme: 'light', ksu: true,
     steps: [['tap', 359, 141], ['wait', 4200], ['sent', ' start 80'],
-      ['tap', 200, 304], ['wait', 800], ['shot', 'disabled'], ['neverSent', 'radio-name.sh']],
+      ['tab', '配置'], ['tap', 200, 180], ['wait', 800], ['shot', 'disabled'], ['neverSent', 'radio-name.sh']],
   },
   ksu_key: {
     query: '', scheme: 'light', ksu: true,
     steps: [
-      ['tap', 200, 420], ['wait', 900], ['shot', 'dialog'],
+      ['tab', '配置'], ['tap', 200, 350], ['wait', 900], ['shot', 'dialog'],
       ['tap', 200, 697], ['type', 'WiFi!$;Q7'], ['wait', 200],
       ['tap', 296, 796], ['wait', 1200], ['shot', 'saved'],
       ['sentMatch', '5769466921243b5137'],
@@ -183,20 +202,24 @@ const scenarios = {
   ksu_width: {
     query: '', scheme: 'light', ksu: true,
     steps: [
-      ['tap', 200, 344], ['wait', 900], ['shot', 'popup'],
-      ['tap', 250, 535], ['wait', 1200], ['shot', 'selected'],
+      ['tab', '配置'], ['tap', 200, 275], ['wait', 900], ['shot', 'popup'],
+      ['tap', 250, 465], ['wait', 1200], ['shot', 'selected'],
       ['sent', ' set-width 160'],
     ],
   },
   scroll: {
     query: '?demo=sta5g', scheme: 'light',
-    steps: [['wheel', 900], ['wait', 900], ['shot', 'conditions'], ['wheel', 900], ['wait', 900], ['shot', 'bottom']],
+    steps: [['tab', '诊断'], ['wheel', 900], ['wait', 900], ['shot', 'conditions'], ['wheel', 900], ['wait', 900], ['shot', 'bottom']],
   },
   touch_scroll: {
     query: '?demo=active', scheme: 'light',
-    steps: [['touchCycles', 6], ['shot', 'after']],
+    steps: [['tab', '诊断'], ['touchCycles', 6], ['shot', 'after']],
   },
   wide: { query: '?demo=active', scheme: 'light', viewport: { width: 1180, height: 820 } },
+  compact: { query: '', scheme: 'light', ksu: true, viewport: { width: 360, height: 800 },
+    steps: [['tab', '配置'], ['shot', 'settings'], ['tab', '关于'], ['shot', 'about'], ['onlyReads']] },
+  compact_dark: { query: '', scheme: 'dark', ksu: true, viewport: { width: 393, height: 852 },
+    steps: [['tab', '配置'], ['shot', 'settings'], ['tab', '诊断'], ['shot', 'diagnostics'], ['onlyReads']] },
 };
 
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
@@ -206,7 +229,7 @@ for (const name of wanted.length ? wanted : Object.keys(scenarios)) {
   if (!s) { console.error(`unknown scenario ${name}`); failed++; continue; }
   const context = await browser.newContext({
     viewport: s.viewport || { width: 412, height: 892 }, deviceScaleFactor: 2, colorScheme: s.scheme,
-    hasTouch: !s.viewport, isMobile: !s.viewport,
+    hasTouch: true, isMobile: !s.viewport || s.viewport.width < 720,
   });
   const page = await context.newPage();
   const problems = [];
@@ -228,7 +251,17 @@ for (const name of wanted.length ? wanted : Object.keys(scenarios)) {
   let commands = [];
   const sent = async () => (s.ksu ? page.evaluate(() => window.__commands) : []);
   for (const [action, a, b] of s.steps || []) {
-    if (action === 'tap') await page.touchscreen.tap(a, b);
+    if (action === 'tab') {
+      const index = ['首页', '配置', '诊断', '关于'].indexOf(a);
+      const { width, height } = page.viewportSize();
+      const bar = Math.min(width, 720);
+      await page.touchscreen.tap((width - bar) / 2 + bar * (index + 0.5) / 4, height - 32);
+      await page.waitForTimeout(500);
+    }
+    else if (action === 'onlyReads') {
+      if ((await sent()).some((c) => !/ status( full)?$/.test(c))) problems.push('navigation sent a write command');
+    }
+    else if (action === 'tap') await page.touchscreen.tap(a, b);
     else if (action === 'wait') await page.waitForTimeout(a);
     else if (action === 'shot') await page.screenshot({ path: join(outDir, `${name}_${a}.png`) });
     else if (action === 'touchCycles') {

@@ -11,7 +11,6 @@ import top.yukonga.miuix.kmp.icon.extended.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -53,11 +52,9 @@ internal fun OverviewCard(state: ConsoleState, status: RadioStatus, onDiagnostic
     Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
         insideMargin = PaddingValues(20.dp)) {
         Text("无线概览", style = MiuixTheme.textStyles.headline1)
-        Text("6GHz · 热点与频段协同管理", style = MiuixTheme.textStyles.body2,
+        Text("热点：${Presentation.hotspotSummary(state)}\n6GHz：${Presentation.sixSummary(state)}", style = MiuixTheme.textStyles.body2,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             modifier = Modifier.padding(top = 6.dp, bottom = 16.dp))
-        BasicComponent(title = "热点", summary = Presentation.hotspotSummary(state))
-        BasicComponent(title = "6GHz 频段", summary = Presentation.sixSummary(state))
         ArrowPreference(title = when {
             blocked > 0 -> "$blocked 项运行条件需处理"
             unknown > 0 -> "$unknown 项运行条件待确认"
@@ -101,7 +98,7 @@ internal fun AboutCard(status: RadioStatus?) {
             ArrowPreference(title = "问题反馈", summary = "前往 GitHub Issues；提交前请去除日志中的敏感信息",
                 onClick = { uriHandler.openUri("$project/issues") })
             ArrowPreference(title = "开源许可", summary = "GNU GPL v3 · 查看项目许可原文",
-                onClick = { uriHandler.openUri("$project/blob/hotspot-6ghz-standalone/LICENSE") })
+                onClick = { uriHandler.openUri("$project/blob/main/LICENSE") })
         }
         Text("致谢", modifier = Modifier.padding(horizontal = 16.dp),
             style = MiuixTheme.textStyles.footnote1,
