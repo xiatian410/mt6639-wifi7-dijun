@@ -54,6 +54,14 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Refresh
+import top.yukonga.miuix.kmp.icon.extended.Home
+import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.Search
+import top.yukonga.miuix.kmp.icon.extended.Info
+import top.yukonga.miuix.kmp.icon.extended.Lock
+import top.yukonga.miuix.kmp.icon.extended.Edit
+import top.yukonga.miuix.kmp.icon.extended.Filter
+import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -63,6 +71,8 @@ import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.TextStyles
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.theme.darkColorScheme
+import top.yukonga.miuix.kmp.theme.lightColorScheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 private val OkColor = Color(0xFF1FA85A)
@@ -70,7 +80,15 @@ private val OkColor = Color(0xFF1FA85A)
 @Composable
 fun ConsoleApp(controller: ConsoleController, textStyles: TextStyles) {
     val state by controller.state.collectAsState()
-    val theme = remember { ThemeController(ColorSchemeMode.System) }
+    val theme = remember { ThemeController(ColorSchemeMode.System,
+        lightColors = lightColorScheme(primary = Color(0xFF426B9C)),
+        darkColors = darkColorScheme(
+            primary = Color(0xFFACCBEF), onPrimary = Color(0xFF142B45),
+            surfaceVariant = Color(0xFF15181D), surfaceContainer = Color(0xFF15181D),
+            surfaceContainerHigh = Color(0xFF1B2028),
+            onSurfaceVariantSummary = Color(0xFFA3AAB5), onBackgroundVariant = Color(0xFF8F99A8),
+        ),
+    ) }
     MiuixTheme(controller = theme, textStyles = textStyles) {
         ConsoleScreen(state, controller)
     }
@@ -149,14 +167,16 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                     else -> {
                         when (page) {
                             ConsolePage.Home -> {
+                                item(key = "hero") { StatusHero(state, status) }
+                                item(key = "metrics") { RadioMetrics(status) }
                                 item(key = "hotspot") { HotspotCard(state, controller) }
                                 item(key = "six") { SixCard(state, status, controller) { confirmSixOff = true } }
-                                item(key = "overview") { OverviewCard(state, status) { page = ConsolePage.Diagnostics } }
+                                item(key = "overview") { OverviewCard(status) { page = ConsolePage.Diagnostics } }
                             }
                             ConsolePage.Settings -> {
                                 item(key = "settings") { SettingsCard(state, status, controller) { askKey = true } }
                                 item(key = "settings-help") {
-                                    Section { BasicComponent(title = "配置说明", summary = "关闭热点后修改参数，下次开启生效。6GHz 热点需客户端支持对应频段。") }
+                                    Section { BasicComponent(title = "使用提示", startAction = { GroupIcon(MiuixIcons.Info) }, summary = "名称与带宽在下次开启时生效。客户端需支持 6GHz。") }
                                 }
                             }
                             ConsolePage.Diagnostics -> Unit
@@ -196,8 +216,9 @@ private fun Section(title: String? = null, content: @Composable ColumnScope.() -
     if (title != null) SmallTitle(text = title)
     Card(
         modifier = Modifier
-            .padding(horizontal = 12.dp)
-            .padding(bottom = 12.dp),
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 16.dp),
+        cornerRadius = 24.dp,
         content = content,
     )
 }
@@ -274,6 +295,7 @@ private fun HotspotCard(state: ConsoleState, controller: ConsoleController) {
     Section {
         SwitchPreference(
             title = "6GHz 热点",
+            startAction = { GroupIcon(MiuixIcons.Link) },
             summary = Presentation.hotspotSummary(state),
             checked = Presentation.hotspotChecked(state),
             onCheckedChange = { controller.setHotspot(it) },
@@ -302,12 +324,14 @@ private fun SettingsCard(
     Section(title = "热点设置") {
         ArrowPreference(
             title = "网络名称",
+            startAction = { GroupIcon(MiuixIcons.Edit) },
             summary = Presentation.nameSummary(state),
             onClick = { askName = true },
             enabled = Presentation.nameEnabled(state),
         )
         OverlayDropdownPreference(
             title = "带宽",
+            startAction = { GroupIcon(MiuixIcons.Filter) },
             summary = "越宽上限越高，也越依赖客户端和周围环境",
             items = WIDTHS.map { "$it MHz" },
             selectedIndex = WIDTHS.indexOf(status.prefWidth).coerceAtLeast(0),
@@ -316,6 +340,7 @@ private fun SettingsCard(
         )
         ArrowPreference(
             title = "热点密码",
+            startAction = { GroupIcon(MiuixIcons.Lock) },
             summary = Presentation.keySummary(status),
             onClick = onAskKey,
             enabled = Presentation.keyEnabled(state),
@@ -333,6 +358,7 @@ private fun SixCard(
     Section(title = "6GHz 频段") {
         SwitchPreference(
             title = "6GHz",
+            startAction = { GroupIcon(MiuixIcons.Settings) },
             summary = Presentation.sixSummary(state),
             checked = Presentation.sixChecked(state),
             onCheckedChange = { on -> if (on) controller.setSix(true) else onConfirmOff() },
@@ -340,6 +366,7 @@ private fun SixCard(
         )
         ArrowPreference(
             title = "重新注册 6GHz",
+            startAction = { GroupIcon(MiuixIcons.Refresh) },
             summary = "软重启后 6GHz 信道消失时使用，会重启一次 WLAN",
             onClick = { controller.refreshSix() },
             enabled = Presentation.sixRefreshEnabled(state),
@@ -372,6 +399,7 @@ private fun MoreCard(status: RadioStatus?, controller: ConsoleController) {
     Section(title = "其他") {
         ArrowPreference(
             title = "查看日志",
+            startAction = { GroupIcon(MiuixIcons.Search) },
             summary = "合并控制、热点、6GHz 三份记录的末尾",
             onClick = { controller.openLogs() },
         )

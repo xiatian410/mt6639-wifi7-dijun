@@ -148,29 +148,29 @@ const scenarios = {
   },
   operation_navigation: {
     query: '', scheme: 'light', ksu: true,
-    steps: [['tap', 359, 141], ['tab', '配置'], ['shot', 'busy'], ['tap', 200, 180],
+    steps: [['tap', 359, 409], ['tab', '配置'], ['shot', 'busy'], ['tap', 200, 180],
       ['wait', 4200], ['shot', 'active_settings'], ['neverSent', 'radio-name.sh'],
-      ['sent', ' start 80'], ['tab', '首页'], ['tap', 359, 141], ['wait', 1800], ['sent', ' stop']],
+      ['sent', ' start 80'], ['tab', '首页'], ['tap', 359, 409], ['wait', 1800], ['sent', ' stop']],
   },
   // Interactions. Coordinates are CSS pixels in the 412x892 phone viewport.
   ksu_migration: {
     query: '?migration=blocked', scheme: 'light', ksu: true,
-    steps: [['tap', 359, 141], ['wait', 700], ['shot', 'blocked'],
+    steps: [['tap', 359, 409], ['wait', 700], ['shot', 'blocked'],
       ['neverSent', ' start '], ['neverSent', ' six-on'], ['neverSent', ' six-refresh']],
   },
   ksu_flow: {
     query: '', scheme: 'light', ksu: true,
-    steps: [['tap', 359, 141], ['wait', 900], ['shot', 'running'], ['wait', 3200], ['shot', 'started'],
-      ['sent', ' start 80'], ['tap', 359, 141], ['wait', 1800], ['shot', 'stopped'], ['sent', ' stop']],
+    steps: [['tap', 359, 409], ['wait', 900], ['shot', 'running'], ['wait', 3200], ['shot', 'started'],
+      ['sent', ' start 80'], ['tap', 359, 409], ['wait', 1800], ['shot', 'stopped'], ['sent', ' stop']],
   },
   ksu_network: {
     query: '?fail=network', scheme: 'light', ksu: true,
-    steps: [['tap', 359, 141], ['wait', 4200], ['sent', ' start 80'],
-      ['tap', 359, 141], ['wait', 1600], ['sent', ' stop'], ['shot', 'readiness_dialog']],
+    steps: [['tap', 359, 409], ['wait', 4200], ['sent', ' start 80'],
+      ['tap', 359, 409], ['wait', 1600], ['sent', ' stop'], ['shot', 'readiness_dialog']],
   },
   ksu_fail: {
     query: '?fail=start', scheme: 'dark', ksu: true,
-    steps: [['tap', 359, 141], ['wait', 2600], ['shot', 'dialog'], ['sent', ' start 80']],
+    steps: [['tap', 359, 409], ['wait', 2600], ['shot', 'dialog'], ['sent', ' start 80']],
   },
   ksu_name: {
     query: '', scheme: 'light', ksu: true,
@@ -185,7 +185,7 @@ const scenarios = {
   },
   ksu_name_active: {
     query: '', scheme: 'light', ksu: true,
-    steps: [['tap', 359, 141], ['wait', 4200], ['sent', ' start 80'],
+    steps: [['tap', 359, 409], ['wait', 4200], ['sent', ' start 80'],
       ['tab', '配置'], ['tap', 200, 180], ['wait', 800], ['shot', 'disabled'], ['neverSent', 'radio-name.sh']],
   },
   ksu_key: {
@@ -254,8 +254,8 @@ for (const name of wanted.length ? wanted : Object.keys(scenarios)) {
     if (action === 'tab') {
       const index = ['首页', '配置', '诊断', '关于'].indexOf(a);
       const { width, height } = page.viewportSize();
-      const bar = Math.min(width, 720);
-      await page.touchscreen.tap((width - bar) / 2 + bar * (index + 0.5) / 4, height - 32);
+      const bar = Math.min(width - 48, 360);
+      await page.touchscreen.tap((width - bar) / 2 + bar * (index + 0.5) / 4, height - 50);
       await page.waitForTimeout(500);
     }
     else if (action === 'onlyReads') {
