@@ -1,12 +1,16 @@
 # MT6639 Native EHT Hotspot
 
-当前源码版本为 **v0.4.2-dijun.1 / code39**：一个 ZIP、一个 `mt6639-hotspot` 模块 ID，内含 6GHz 后端、热点与 WebUI，无需另装 6GHz 模块。保留可编辑热点名称和触摸滚动修复。以下保留的 v0.3.0-dijun.1 / code35 及 v0.2.26-dijun.1 / code34 说明仍适用。原生热点不再按旧 OTA fingerprint 拒绝已核对内核/驱动；蜂窝和普通 Wi-Fi 上游不再强制提供实验网络恢复口令。修复 v0.2.24 安装后完整性检查拒绝：KernelSU 在安装结束时删除 `customize.sh`，它不应出现在运行时的 `SHA256SUMS` 中。其余静态脚本、原生程序、DEX 和元数据模板仍校验；动态描述更新方式不变。请安装新构建包，不要在设备上重生成校验清单或绕过校验。本次未验证实机热点启动或客户端联网。
+当前源码版本为 **v0.4.3-dijun.1 / code40**：一个 ZIP、一个 `mt6639-hotspot` 模块 ID，内含 6GHz 后端、热点与 WebUI，无需另装 6GHz 模块。保留可编辑热点名称和触摸滚动修复。以下保留的 v0.3.0-dijun.1 / code35 及 v0.2.26-dijun.1 / code34 说明仍适用。原生热点不再按旧 OTA fingerprint 拒绝已核对内核/驱动；蜂窝和普通 Wi-Fi 上游不再强制提供实验网络恢复口令。修复 v0.2.24 安装后完整性检查拒绝：KernelSU 在安装结束时删除 `customize.sh`，它不应出现在运行时的 `SHA256SUMS` 中。其余静态脚本、原生程序、DEX 和元数据模板仍校验；动态描述更新方式不变。请安装新构建包，不要在设备上重生成校验清单或绕过校验。本次未验证实机热点启动或客户端联网。
 
 ## 二合一安装与控制（v0.4.0-dijun.1）
 
 `bin/radio-control.sh` 把「启用 6GHz」和「启动 6GHz 热点」合成一个入口，模块的「操作」按钮与 WebUI 控制台都走它。它自己不改无线状态：每一步仍然调用内置 `six/bin/control.sh` 与热点 `bin/control.sh`，两边原有的锁、校验、恢复逻辑照旧是最终裁决；它只负责排序、在已知必然失败时提前拒绝，以及把自己启用的 6GHz 还回去。
 
 **v0.4.0 起是安装二合一，不是两个模块的快捷入口。** 唯一模块根目录为 `/data/adb/modules/mt6639-hotspot`；`six/` 只是内部后端目录，没有第二份模块元数据、service 或 uninstall。原生程序已用 Android NDK r27c 重编，固定检查热点模块的生命周期。事务工作目录仍保留 `/data/adb/mt6639-6g`，避免丢失旧恢复记录，它不是需要安装的另一个模块。
+
+### v0.4.3：新版界面与控制稳定性
+
+四页 WebUI 增加状态主卡、双列指标、图标分组与悬浮胶囊导航。修复连续刷新排队、桥接异常卡住、旧日志等待以及成功输出与异常退出冲突。跨启动恢复在核对原厂状态后归档旧 wrapper authority，不重放旧启动事务；配置不符时保留记录。完整包包含重新编译的 WebUI，原生与 DEX 沿用已核对固定哈希输入。仅完成离线与桌面浏览器验证，未在手机安装或验证无线业务。
 
 ### v0.4.2：进程扫描退出竞态
 
@@ -80,7 +84,7 @@ sh tools/build_hotspot_module.sh \
   /path/to/native-tether.dex \
   /path/to/softap-profile.dex \
   /path/to/delete_ifindex \
-  /tmp/mt6639-hotspot-v0.4.2-dijun.1.zip \
+  /tmp/mt6639-hotspot-v0.4.3-dijun.1.zip \
   /tmp/mt6639-webroot \
   /tmp/mt6639-native/mount-txn
 ```

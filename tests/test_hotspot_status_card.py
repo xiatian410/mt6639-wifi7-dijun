@@ -97,7 +97,8 @@ if [ "$2" = %u ]; then echo 0; else exec REAL_STAT "$@"; fi
         self.assertEqual(self.card().returncode, 0)
         self.assertEqual(self.verify(), 0)
         p = self.mod / 'module.prop'
-        p.write_text(p.read_text().replace('versionCode=39', 'versionCode=99'))
+        import re
+        p.write_text(re.sub(r'^versionCode=.*$', 'versionCode=99', p.read_text(), flags=re.MULTILINE))
         self.assertNotEqual(self.verify(), 0)
         shutil.copyfile(self.mod / 'module.prop.template', p)
         p = self.mod / 'bin/status-card.sh'
