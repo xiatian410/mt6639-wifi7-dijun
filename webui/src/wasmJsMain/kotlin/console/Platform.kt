@@ -15,8 +15,13 @@ internal external fun jsRun(command: String, onLine: (Boolean, String) -> Unit, 
 @JsFun("(url, onOk, onErr) => window.mt6639.fetchBase64(url, onOk, onErr)")
 internal external fun jsFetchBase64(url: String, onOk: (String) -> Unit, onErr: (String) -> Unit)
 
-@JsFun("(title, hint, onOk, onCancel) => window.mt6639.promptSecret(title, hint, onOk, onCancel)")
-internal external fun jsPromptSecret(title: String, hint: String, onOk: (String) -> Unit, onCancel: () -> Unit)
+@JsFun("(title, hint, initial, secret, validate, save) => window.mt6639.promptInput(title, hint, initial, secret, validate, save)")
+internal external fun jsPromptInput(title: String, hint: String, initial: String, secret: Boolean,
+    validate: (String) -> String, save: (String) -> Boolean)
+
+@JsFun("(page, card, text, weak, line, primary, onPrimary, field, error) => window.mt6639.setTheme(page, card, text, weak, line, primary, onPrimary, field, error)")
+internal external fun jsSetTheme(page: String, card: String, text: String, weak: String, line: String,
+    primary: String, onPrimary: String, field: String, error: String)
 
 @JsFun("() => window.mt6639.visible()")
 internal external fun pageVisible(): Boolean

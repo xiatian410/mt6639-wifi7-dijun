@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -31,11 +30,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -50,7 +47,6 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Refresh
@@ -71,25 +67,21 @@ import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.TextStyles
 import top.yukonga.miuix.kmp.theme.ThemeController
-import top.yukonga.miuix.kmp.theme.darkColorScheme
-import top.yukonga.miuix.kmp.theme.lightColorScheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
-private val OkColor = Color(0xFF1FA85A)
+private fun Color.css(): String = "#" + toArgb().toUInt().toString(16).padStart(8, '0').drop(2)
 
 @Composable
 fun ConsoleApp(controller: ConsoleController, textStyles: TextStyles) {
     val state by controller.state.collectAsState()
-    val theme = remember { ThemeController(ColorSchemeMode.System,
-        lightColors = lightColorScheme(primary = Color(0xFF426B9C)),
-        darkColors = darkColorScheme(
-            primary = Color(0xFFACCBEF), onPrimary = Color(0xFF142B45),
-            surfaceVariant = Color(0xFF15181D), surfaceContainer = Color(0xFF15181D),
-            surfaceContainerHigh = Color(0xFF1B2028),
-            onSurfaceVariantSummary = Color(0xFFA3AAB5), onBackgroundVariant = Color(0xFF8F99A8),
-        ),
-    ) }
+    val theme = remember { ThemeController(ColorSchemeMode.MonetSystem, keyColor = Color(0xFF426B9C)) }
     MiuixTheme(controller = theme, textStyles = textStyles) {
+        val colors = MiuixTheme.colorScheme
+        androidx.compose.runtime.SideEffect {
+            jsSetTheme(colors.background.css(), colors.surfaceContainer.css(), colors.onSurface.css(),
+                colors.onSurfaceVariantSummary.css(), colors.outline.css(), colors.primary.css(),
+                colors.onPrimary.css(), colors.secondaryContainer.css(), colors.error.css())
+        }
         ConsoleScreen(state, controller)
     }
 }
@@ -98,9 +90,6 @@ fun ConsoleApp(controller: ConsoleController, textStyles: TextStyles) {
 private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
     val scrollBehavior = MiuixScrollBehavior()
     var page by remember { mutableStateOf(ConsolePage.Home) }
-    val pageScroll = androidx.compose.foundation.lazy.rememberLazyListState()
-    androidx.compose.runtime.LaunchedEffect(page) { pageScroll.scrollToItem(0) }
-    var askKey by remember { mutableStateOf(false) }
     var confirmSixOff by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
@@ -117,6 +106,9 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
         bottomBar = { PageNavigation(page) { page = it } },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            androidx.compose.animation.Crossfade(targetState = page,
+                animationSpec = androidx.compose.animation.core.tween(180), label = "console-page") { shownPage ->
+            val pageScroll = androidx.compose.foundation.lazy.rememberLazyListState()
             LazyColumn(
                 state = pageScroll,
                 modifier = Modifier
@@ -142,8 +134,8 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                     }
                 }
                 when {
-                    page == ConsolePage.About -> item(key = "about") { AboutCard(status) }
-                    page == ConsolePage.Diagnostics -> {
+                    shownPage == ConsolePage.About -> item(key = "about") { AboutCard(status) }
+                    shownPage == ConsolePage.Diagnostics -> {
                         if (status != null) {
                             if (status.sixCard.isNotBlank()) {
                                 item(key = "six-detail") {
@@ -165,7 +157,7 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                         ProblemCard(state.statusProblem.orEmpty()) { controller.refresh() }
                     }
                     else -> {
-                        when (page) {
+                        when (shownPage) {
                             ConsolePage.Home -> {
                                 item(key = "hero") { StatusHero(state, status) }
                                 item(key = "metrics") { RadioMetrics(status) }
@@ -174,7 +166,7 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                                 item(key = "overview") { OverviewCard(status) { page = ConsolePage.Diagnostics } }
                             }
                             ConsolePage.Settings -> {
-                                item(key = "settings") { SettingsCard(state, status, controller) { askKey = true } }
+                                item(key = "settings") { SettingsCard(state, status, controller) }
                                 item(key = "settings-help") {
                                     Section { BasicComponent(title = "使用提示", startAction = { GroupIcon(MiuixIcons.Info) }, summary = "名称与带宽在下次开启时生效。客户端需支持 6GHz。") }
                                 }
@@ -186,14 +178,7 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                 }
                 item(key = "footer") { Footer() }
             }
-            KeyDialog(
-                show = askKey,
-                onDismiss = { askKey = false },
-                onSave = {
-                    askKey = false
-                    controller.savePassphrase(it)
-                },
-            )
+            }
             ConfirmDialog(
                 show = confirmSixOff,
                 title = "关闭 6GHz？",
@@ -309,24 +294,16 @@ private fun SettingsCard(
     state: ConsoleState,
     status: RadioStatus,
     controller: ConsoleController,
-    onAskKey: () -> Unit,
 ) {
-    var askName by remember { mutableStateOf(false) }
-    NameDialog(
-        show = askName,
-        initialName = status.ssid,
-        enabled = Presentation.nameEnabled(state),
-        onDismiss = { askName = false },
-        onSave = {
-            if (controller.saveName(it) != null) askName = false
-        },
-    )
     Section(title = "热点设置") {
         ArrowPreference(
             title = "网络名称",
             startAction = { GroupIcon(MiuixIcons.Edit) },
             summary = Presentation.nameSummary(state),
-            onClick = { askName = true },
+            onClick = {
+                jsPromptInput("设置网络名称", "支持中文和表情，最多 32 个 UTF-8 字节。下次开启时生效。", status.ssid, false,
+                    { ssidProblem(it).orEmpty() }, { controller.saveName(it) != null })
+            },
             enabled = Presentation.nameEnabled(state),
         )
         OverlayDropdownPreference(
@@ -342,7 +319,12 @@ private fun SettingsCard(
             title = "热点密码",
             startAction = { GroupIcon(MiuixIcons.Lock) },
             summary = Presentation.keySummary(status),
-            onClick = onAskKey,
+            onClick = {
+                jsPromptInput("设置热点密码", "8–63 位英文字母、数字或符号。保存后不会显示。", "", true,
+                    { passphraseProblem(it).orEmpty() }, {
+                        Presentation.keyEnabled(controller.state.value) && controller.savePassphrase(it) != null
+                    })
+            },
             enabled = Presentation.keyEnabled(state),
         )
     }
@@ -383,7 +365,7 @@ private fun ConditionsCard(status: RadioStatus) {
                 summary = condition.summary,
                 endActions = {
                     val (label, color) = when (condition.ok) {
-                        true -> "正常" to OkColor
+                        true -> "正常" to MiuixTheme.colorScheme.primary
                         false -> "需处理" to MiuixTheme.colorScheme.error
                         null -> "未知" to MiuixTheme.colorScheme.onSurfaceVariantActions
                     }
@@ -437,110 +419,6 @@ private fun DialogButtons(
             enabled = confirmEnabled,
             colors = ButtonDefaults.textButtonColorsPrimary(),
         )
-    }
-}
-
-@Composable
-private fun NameDialog(
-    show: Boolean,
-    initialName: String,
-    enabled: Boolean,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
-) {
-    var text by remember(show) { mutableStateOf(initialName) }
-    val problem = ssidProblem(text)
-    OverlayDialog(
-        show = show,
-        title = "设置网络名称",
-        summary = "需先关闭热点再修改，下次开启生效。支持中文和表情，共 1 到 32 个 UTF-8 字节，不能包含控制字符或换行。",
-        onDismissRequest = onDismiss,
-    ) {
-        Column {
-            TextField(
-                value = text,
-                onValueChange = { text = it },
-                label = "网络名称",
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                text = if (!enabled) "当前状态不允许修改，请先关闭热点并等待操作结束" else
-                    problem ?: "${text.encodeToByteArray().size} / 32 字节 · 可以保存",
-                style = MiuixTheme.textStyles.footnote1,
-                color = if (enabled && problem == null) OkColor else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.padding(top = 10.dp, bottom = 16.dp),
-            )
-            DialogButtons(
-                cancel = "取消",
-                confirm = "保存",
-                confirmEnabled = enabled && problem == null,
-                onCancel = onDismiss,
-                onConfirm = { onSave(text) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun KeyDialog(show: Boolean, onDismiss: () -> Unit, onSave: (String) -> Unit) {
-    // A new, empty field each time the dialog opens; the value is never kept.
-    var text by remember(show) { mutableStateOf("") }
-    var reveal by remember(show) { mutableStateOf(false) }
-    val problem = passphraseProblem(text)
-    OverlayDialog(
-        show = show,
-        title = "设置热点密码",
-        summary = "8 到 63 位英文字母、数字或符号。保存后不会再显示，忘了可以直接换一个。",
-        onDismissRequest = onDismiss,
-    ) {
-        Column {
-            TextField(
-                value = text,
-                onValueChange = { text = it },
-                label = "密码",
-                singleLine = true,
-                visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = if (text.isEmpty()) "" else problem ?: "可以保存",
-                    style = MiuixTheme.textStyles.footnote1,
-                    color = if (problem == null) OkColor else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                )
-                Text(
-                    text = if (reveal) "隐藏" else "显示",
-                    style = MiuixTheme.textStyles.footnote1,
-                    color = MiuixTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { reveal = !reveal },
-                )
-            }
-            DialogButtons(
-                cancel = "取消",
-                confirm = "保存",
-                confirmEnabled = problem == null,
-                onCancel = onDismiss,
-                onConfirm = { onSave(text) },
-            )
-            Text(
-                text = "键盘没有弹出？改用系统输入框",
-                style = MiuixTheme.textStyles.footnote1,
-                color = MiuixTheme.colorScheme.primary,
-                modifier = Modifier
-                    .padding(top = 16.dp)
-                    .align(Alignment.CenterHorizontally)
-                    .clickable {
-                        jsPromptSecret("设置热点密码", "8 到 63 位英文字母、数字或符号", { text = it }, {})
-                    },
-            )
-        }
     }
 }
 

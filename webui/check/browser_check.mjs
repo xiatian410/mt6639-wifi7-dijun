@@ -176,8 +176,8 @@ const scenarios = {
     query: '', scheme: 'light', ksu: true,
     steps: [
       ['tab', '配置'], ['tap', 200, 180], ['wait', 800], ['shot', 'name_dialog'],
-      ['tap', 200, 740], ['press', 'ControlOrMeta+A'], ['insert', 'Lab 演示'], ['wait', 200],
-      ['shot', 'name_valid'], ['tap', 296, 830], ['wait', 1200],
+      ['inputFocused'], ['fillInput', 'Lab 演示'], ['wait', 200],
+      ['shot', 'name_valid'], ['saveInput'], ['wait', 1200],
       ['shot', 'name_saved'],
       ['sentMatch', '4c616220e6bc94e7a4ba'], ['sentMatch', 'radio-name.sh.* set'],
       ['neverSent', 'Lab 演示'],
@@ -192,8 +192,8 @@ const scenarios = {
     query: '', scheme: 'light', ksu: true,
     steps: [
       ['tab', '配置'], ['tap', 200, 350], ['wait', 900], ['shot', 'dialog'],
-      ['tap', 200, 697], ['type', 'WiFi!$;Q7'], ['wait', 200],
-      ['tap', 296, 796], ['wait', 1200], ['shot', 'saved'],
+      ['inputFocused'], ['fillInput', 'WiFi!$;Q7'], ['wait', 200],
+      ['saveInput'], ['wait', 1200], ['shot', 'saved'],
       ['sentMatch', '5769466921243b5137'],
       ['sentMatch', 'radio-key.sh.* set'],
       ['neverSent', 'WiFi!$;Q7'],
@@ -220,6 +220,13 @@ const scenarios = {
     steps: [['tab', '配置'], ['shot', 'settings'], ['tab', '关于'], ['shot', 'about'], ['onlyReads']] },
   compact_dark: { query: '', scheme: 'dark', ksu: true, viewport: { width: 393, height: 852 },
     steps: [['tab', '配置'], ['shot', 'settings'], ['tab', '诊断'], ['shot', 'diagnostics'], ['onlyReads']] },
+  ime: { query: '', scheme: 'dark', ksu: true,
+    steps: [['tab', '配置'], ['tap', 200, 180], ['inputFocused'], ['imeChecks'], ['shot', 'native_input'],
+      ['fillInput', '中文热点'], ['saveInput'], ['wait', 1000], ['sentMatch', 'radio-name.sh.* set'],
+      ['tap', 200, 350], ['inputFocused'], ['fillInput', 'short'], ['inputInvalid'],
+      ['cancelInput'], ['inputClosed'], ['neverSent', 'radio-key.sh']] },
+  navigation_motion: { query: '', scheme: 'dark', ksu: true,
+    steps: [['navMotion'], ['onlyReads']] },
 };
 
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
@@ -262,6 +269,64 @@ for (const name of wanted.length ? wanted : Object.keys(scenarios)) {
       if ((await sent()).some((c) => !/ status( full)?$/.test(c))) problems.push('navigation sent a write command');
     }
     else if (action === 'tap') await page.touchscreen.tap(a, b);
+    else if (action === 'inputFocused') {
+      if (!await page.locator('.mt-input').evaluate((e) => e === document.activeElement)) problems.push('native input did not receive focus');
+    }
+    else if (action === 'fillInput') await page.locator('.mt-input').fill(a);
+    else if (action === 'saveInput') await page.getByRole('button', { name: '保存', exact: true }).click();
+    else if (action === 'cancelInput') await page.getByRole('button', { name: '取消', exact: true }).click();
+    else if (action === 'inputClosed') {
+      const restored = await page.evaluate(() => !document.querySelector('.mt-veil') &&
+        !document.getElementById('composeApp').inert && !document.getElementById('composeApp').style.height);
+      if (!restored) problems.push('input close did not restore Canvas');
+    }
+    else if (action === 'navMotion') {
+      const { width, height } = page.viewportSize();
+      const bar = Math.min(width - 48, 360);
+      const clip = { x: 0, y: height - 120, width, height: 120 };
+      const before = await page.screenshot({ clip });
+      await page.touchscreen.tap((width - bar) / 2 + bar * 3.5 / 4, height - 50);
+      await page.waitForTimeout(60);
+      const during = await page.screenshot({ clip, path: join(outDir, `${name}_during.png`) });
+      await page.waitForTimeout(400);
+      const after = await page.screenshot({ clip, path: join(outDir, `${name}_after.png`) });
+      if (before.equals(during) || during.equals(after)) problems.push('navigation had no distinct intermediate frame');
+    }
+    else if (action === 'inputInvalid') {
+      if (!await page.getByRole('button', { name: '保存', exact: true }).isDisabled()) problems.push('invalid input enabled save');
+    }
+    else if (action === 'imeChecks') {
+      const original = page.viewportSize();
+      const canvasHeight = await page.locator('#composeApp').evaluate((e) => e.getBoundingClientRect().height);
+      await page.locator('.mt-input').fill('中');
+      await page.locator('.mt-input').dispatchEvent('compositionstart');
+      await page.locator('.mt-input').press('Enter');
+      if ((await sent()).some((c) => c.includes('radio-name.sh'))) problems.push('IME composition submitted prematurely');
+      await page.locator('.mt-input').dispatchEvent('compositionend');
+      // Emulate IME resize increments. This checks layout/focus stability, not
+      // whether a physical Android keyboard actually opens.
+      for (const height of [760, 640, 520, 440]) {
+        await page.setViewportSize({ width: original.width, height });
+        await page.waitForTimeout(60);
+        const geometry = await page.evaluate(() => {
+          const input = document.querySelector('.mt-input');
+          const r = input.getBoundingClientRect();
+          return { top: r.top, bottom: r.bottom, focused: input === document.activeElement,
+            canvas: document.getElementById('composeApp').getBoundingClientRect().height,
+            vh: visualViewport.height, offset: visualViewport.offsetTop };
+        });
+        if (!geometry.focused || geometry.canvas !== canvasHeight || geometry.top < geometry.offset || geometry.bottom > geometry.vh + geometry.offset)
+          problems.push(`IME resize ${height}: input or Canvas moved out of bounds`);
+      }
+      await page.screenshot({ path: join(outDir, `${name}_keyboard_resize.png`) });
+      const before = await page.locator('.mt-card').evaluate((e) => getComputedStyle(e).backgroundColor);
+      await page.emulateMedia({ colorScheme: 'light' });
+      await page.waitForTimeout(300);
+      const after = await page.locator('.mt-card').evaluate((e) => getComputedStyle(e).backgroundColor);
+      if (before === after) problems.push('open input did not follow theme change');
+      await page.setViewportSize(original);
+      await page.waitForTimeout(150);
+    }
     else if (action === 'wait') await page.waitForTimeout(a);
     else if (action === 'shot') await page.screenshot({ path: join(outDir, `${name}_${a}.png`) });
     else if (action === 'touchCycles') {

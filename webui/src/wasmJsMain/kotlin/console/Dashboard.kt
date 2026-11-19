@@ -4,17 +4,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalUriHandler
@@ -25,6 +21,10 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Info
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -39,25 +39,26 @@ internal enum class ConsolePage(val label: String) {
 @Composable
 internal fun PageNavigation(selected: ConsolePage, onSelect: (ConsolePage) -> Unit) {
     Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), contentAlignment = Alignment.Center) {
-        Row(Modifier.widthIn(max = 360.dp).fillMaxWidth()
+        BoxWithConstraints(Modifier.widthIn(max = 360.dp).fillMaxWidth()
             .shadow(12.dp, RoundedCornerShape(40.dp)).clip(RoundedCornerShape(40.dp))
             .background(MiuixTheme.colorScheme.surfaceContainer)
             .border(1.dp, MiuixTheme.colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(40.dp))
-            .selectableGroup().padding(6.dp)) {
-            ConsolePage.entries.forEach { page ->
-                val active = selected == page
-                val color = if (active) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceVariantSummary
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(32.dp))
-                    .background(if (active) MiuixTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent)
-                    .selectable(selected = active, role = Role.Tab, onClick = { onSelect(page) }).padding(vertical = 10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Icon(when (page) {
-                        ConsolePage.Home -> MiuixIcons.Home
-                        ConsolePage.Settings -> MiuixIcons.Settings
-                        ConsolePage.Diagnostics -> MiuixIcons.Search
-                        ConsolePage.About -> MiuixIcons.Info
-                    }, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
-                    Text(page.label, fontSize = 12.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal, color = color)
+            .padding(6.dp)) {
+            val itemWidth = maxWidth / ConsolePage.entries.size
+            val indicatorX by animateDpAsState(itemWidth * selected.ordinal,
+                animationSpec = tween(300, easing = FastOutSlowInEasing), label = "navigation-indicator")
+            Box(Modifier.offset(x = indicatorX).width(itemWidth).height(NavigationBarDefaults.ItemHeight)
+                .clip(RoundedCornerShape(32.dp)).background(MiuixTheme.colorScheme.primaryContainer))
+            NavigationBar(color = Color.Transparent, showDivider = false,
+                defaultWindowInsetsPadding = false, mode = NavigationBarDisplayMode.IconWithSelectedLabel) {
+                ConsolePage.entries.forEach { page ->
+                    NavigationBarItem(selected = selected == page, onClick = { onSelect(page) }, label = page.label,
+                        icon = when (page) {
+                            ConsolePage.Home -> MiuixIcons.Home
+                            ConsolePage.Settings -> MiuixIcons.Settings
+                            ConsolePage.Diagnostics -> MiuixIcons.Search
+                            ConsolePage.About -> MiuixIcons.Info
+                        })
                 }
             }
         }
@@ -81,18 +82,19 @@ internal fun StatusHero(state: ConsoleState, status: RadioStatus) {
         status.hotspotState == HotspotState.Idle -> if (status.sixReady) "6GHz 已启用 · 按需开启共享" else "开启热点时将先启用 6GHz"
         else -> Presentation.hotspotSummary(state)
     }
+    val heroInk = MiuixTheme.colorScheme.onPrimaryContainer
     Box(Modifier.padding(horizontal = 16.dp).padding(bottom = 14.dp).fillMaxWidth()
-        .clip(RoundedCornerShape(28.dp)).background(Brush.linearGradient(listOf(Color(0xFF344F70), Color(0xFF45678C))))) {
+        .clip(RoundedCornerShape(28.dp)).background(MiuixTheme.colorScheme.primaryContainer)) {
         Canvas(Modifier.matchParentSize()) {
             val c = Offset(size.width * 0.93f, size.height * 0.58f)
             for (radius in listOf(45f, 85f, 125f)) {
-                drawCircle(Color.White.copy(alpha = 0.07f), radius * density, c, style = Stroke(15f * density))
+                drawCircle(heroInk.copy(alpha = 0.07f), radius * density, c, style = Stroke(15f * density))
             }
         }
         Column(Modifier.padding(22.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("MT6639  /  WIRELESS", color = Color(0xFFC5D9F1), fontSize = 11.sp, letterSpacing = 1.5.sp)
-            Text(title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
-            Text(detail, color = Color(0xFFD4E1F2), fontSize = 13.sp, modifier = Modifier.widthIn(max = 300.dp))
+            Text("MT6639  /  WIRELESS", color = heroInk.copy(alpha = 0.8f), fontSize = 11.sp, letterSpacing = 1.5.sp)
+            Text(title, color = heroInk, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+            Text(detail, color = heroInk.copy(alpha = 0.85f), fontSize = 13.sp, modifier = Modifier.widthIn(max = 300.dp))
         }
     }
 }

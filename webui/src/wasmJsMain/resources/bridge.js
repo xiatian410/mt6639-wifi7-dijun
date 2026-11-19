@@ -89,44 +89,134 @@
     return e;
   }
 
-  // A plain input element for the passphrase, for WebViews in which the
-  // canvas text field cannot raise the keyboard. The value goes only to onOk.
-  function promptSecret(title, hint, onOk, onCancel) {
+  var dismissInput = null;
+
+  // The same resolved Miuix palette drives Canvas and DOM, including live theme changes.
+  function setTheme(page, card, text, weak, line, primary, onPrimary, field, error) {
+    var values = { page: page, card: card, text: text, weak: weak, line: line,
+      primary: primary, 'on-primary': onPrimary, field: field, error: error };
+    Object.keys(values).forEach(function (key) {
+      document.documentElement.style.setProperty('--' + key, values[key]);
+    });
+  }
+
+  // Called synchronously from the user's click: focus is not deferred through
+  // a Compose effect/timer, so WebView sees a real editable element and gesture.
+  function promptInput(title, hint, initial, secret, validate, save) {
+    if (dismissInput) dismissInput();
     var veil = element('div', 'mt-veil');
-    var card = element('div', 'mt-card');
+    var card = element('form', 'mt-card');
     var input = element('input', 'mt-input');
-    var reveal = element('label', 'mt-reveal');
-    var box = element('input');
     var row = element('div', 'mt-row');
     var cancel = element('button', 'mt-button', '取消');
-    var ok = element('button', 'mt-button mt-primary', '确定');
-    input.type = 'password';
+    var ok = element('button', 'mt-button mt-primary', '保存');
+    var message = element('div', 'mt-validation');
+    var composing = false;
+    var closed = false;
+    var previousFocus = document.activeElement;
+    var surface = document.getElementById('composeApp');
+    var previousStyle = surface ? surface.getAttribute('style') : null;
+    var previousInert = surface ? surface.inert : false;
+    var viewport = window.visualViewport;
+    var frame = 0;
+    input.type = secret ? 'password' : 'text';
+    input.value = initial;
     input.autocomplete = 'off';
     input.spellcheck = false;
-    input.maxLength = 63;
+    input.setAttribute('aria-label', title);
+    input.setAttribute('aria-describedby', 'mt-input-error');
+    input.setAttribute('enterkeyhint', 'done');
     input.setAttribute('autocapitalize', 'off');
     input.setAttribute('autocorrect', 'off');
-    box.type = 'checkbox';
-    box.onchange = function () { input.type = box.checked ? 'text' : 'password'; };
-    reveal.appendChild(box);
-    reveal.appendChild(document.createTextNode(' 显示密码'));
-    function close() {
-      input.value = '';
-      if (veil.parentNode) veil.parentNode.removeChild(veil);
+    message.id = 'mt-input-error';
+    message.setAttribute('aria-live', 'polite');
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+    card.setAttribute('aria-label', title);
+    cancel.type = 'button';
+    ok.type = 'submit';
+
+    // Freeze only the covered Canvas during IME resize. The DOM sheet follows
+    // the visual viewport once per frame, with no CSS height/position animation
+    // and no scrollIntoView/focus loops competing with the keyboard animation.
+    if (surface) {
+      surface.style.width = surface.clientWidth + 'px';
+      surface.style.height = surface.clientHeight + 'px';
+      surface.style.right = 'auto'; surface.style.bottom = 'auto';
+      surface.inert = true;
     }
-    cancel.onclick = function () { close(); onCancel(); };
-    ok.onclick = function () { var value = input.value; close(); onOk(value); };
-    input.onkeydown = function (e) { if (e.key === 'Enter') ok.onclick(); };
-    row.appendChild(cancel);
-    row.appendChild(ok);
+    function layout() {
+      frame = 0;
+      var height = viewport ? viewport.height : window.innerHeight;
+      var top = viewport ? viewport.offsetTop : 0;
+      veil.style.height = height + 'px';
+      veil.style.top = top + 'px';
+    }
+    function scheduleLayout() {
+      if (!frame) frame = requestAnimationFrame(layout);
+    }
+    function check() {
+      var problem = validate(input.value);
+      message.textContent = problem;
+      input.setAttribute('aria-invalid', problem ? 'true' : 'false');
+      ok.disabled = composing || !!problem;
+      return !problem && !composing;
+    }
+    function close() {
+      if (closed) return;
+      closed = true;
+      input.value = '';
+      input.blur();
+      if (frame) cancelAnimationFrame(frame);
+      window.removeEventListener('resize', scheduleLayout);
+      if (viewport) { viewport.removeEventListener('resize', scheduleLayout); viewport.removeEventListener('scroll', scheduleLayout); }
+      veil.remove();
+      if (surface) {
+        if (previousStyle === null) surface.removeAttribute('style'); else surface.setAttribute('style', previousStyle);
+        surface.inert = previousInert;
+      }
+      dismissInput = null;
+      if (previousFocus && previousFocus.isConnected && previousFocus !== document.body) previousFocus.focus({ preventScroll: true });
+    }
+    dismissInput = close;
+    cancel.onclick = close;
+    veil.onclick = function (e) { if (e.target === veil) close(); };
+    card.onsubmit = function (e) {
+      e.preventDefault();
+      if (!check()) return;
+      if (save(input.value)) close();
+      else message.textContent = '当前状态不允许保存，请关闭后重试。';
+    };
+    input.oninput = check;
+    input.addEventListener('compositionstart', function () { composing = true; ok.disabled = true; });
+    input.addEventListener('compositionend', function () { composing = false; check(); });
+    veil.onkeydown = function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      if (e.key === 'Enter' && (composing || e.isComposing)) e.preventDefault();
+      if (e.key === 'Tab') {
+        var controls = Array.from(card.querySelectorAll('input, button')).filter(function (el) { return !el.disabled; });
+        var first = controls[0], last = controls[controls.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
     card.appendChild(element('div', 'mt-title', title));
     card.appendChild(element('div', 'mt-hint', hint));
     card.appendChild(input);
-    card.appendChild(reveal);
-    card.appendChild(row);
-    veil.appendChild(card);
+    card.appendChild(message);
+    if (secret) {
+      var reveal = element('label', 'mt-reveal');
+      var box = element('input'); box.type = 'checkbox';
+      box.onchange = function () { input.type = box.checked ? 'text' : 'password'; };
+      reveal.appendChild(box); reveal.appendChild(document.createTextNode(' 显示密码'));
+      card.appendChild(reveal);
+    }
+    row.appendChild(cancel); row.appendChild(ok); card.appendChild(row); veil.appendChild(card);
     document.body.appendChild(veil);
-    input.focus();
+    window.addEventListener('resize', scheduleLayout);
+    if (viewport) { viewport.addEventListener('resize', scheduleLayout); viewport.addEventListener('scroll', scheduleLayout); }
+    layout(); check();
+    input.focus({ preventScroll: true });
   }
 
   function fatal(message) {
@@ -156,7 +246,8 @@
     available: function () { return ksuObject() !== null; },
     run: run,
     fetchBase64: fetchBase64,
-    promptSecret: promptSecret,
+    promptInput: promptInput,
+    setTheme: setTheme,
     visible: function () { return document.visibilityState !== 'hidden'; },
     ready: function () {
       ready = true;
