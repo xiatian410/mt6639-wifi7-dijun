@@ -294,9 +294,20 @@ cmd_restore() {
         return 90
     fi
     [ -d "$tx" ] || { echo restore_failed >"$STATE"; return 90; }
-    [ ! -L "$tx/wrapper-boot" ] &&
-        [ "$(cat "$tx/wrapper-boot" 2>/dev/null)" = "$(boot_id)" ] || {
+    [ ! -L "$tx/wrapper-boot" ] && [ -f "$tx/wrapper-boot" ] || {
         log 'REJECT missing_or_cross_boot_authority'; return 90; }
+    restore_boot=$(cat "$tx/wrapper-boot" 2>/dev/null) || return 90
+    if [ "$restore_boot" != "$(boot_id)" ]; then
+        # Under control.sh's lock. Only retire old wrapper authority after
+        # cmd_reconcile proves stock in both self and init namespaces.
+        # Never replay an old boot's native journal against this kernel.
+        cmd_reconcile || return 90
+        [ ! -s "$ACTIVE_TX_FILE" ] || return 90
+        echo restored >"$STATE" || return 90
+        log 'native restore: cross-boot authority safely retired'
+        printf '{"status":"restored","reason":"cross_boot_retired_stock"}\n'
+        return 0
+    fi
     if guardian_alive "$tx"; then
         "$NATIVE" cancel "$tx" >>"$tx/restore-wrapper.log" 2>&1 || {
             echo restore_failed >"$STATE"; return 90; }

@@ -80,12 +80,15 @@ fun ConsoleApp(controller: ConsoleController, textStyles: TextStyles) {
 @Composable
 private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
     val scrollBehavior = MiuixScrollBehavior()
+    var page by remember { mutableStateOf(ConsolePage.Home) }
+    val pageScroll = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(page) { pageScroll.scrollToItem(0) }
     var askKey by remember { mutableStateOf(false) }
     var confirmSixOff by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
-                title = "MT6639 无线控制台",
+                title = if (page == ConsolePage.Home) "MT6639" else page.label,
                 scrollBehavior = scrollBehavior,
                 actions = {
                     IconButton(onClick = { controller.refresh() }, enabled = state.op == null) {
@@ -94,9 +97,11 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                 },
             )
         },
+        bottomBar = { PageNavigation(page) { page = it } },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             LazyColumn(
+                state = pageScroll,
                 modifier = Modifier
                     .widthIn(max = 720.dp)
                     .fillMaxHeight()
@@ -111,17 +116,39 @@ private fun ConsoleScreen(state: ConsoleState, controller: ConsoleController) {
                     item(key = "demo") { DemoBanner() }
                 }
                 val status = state.status
+                if (state.op != null && page != ConsolePage.Home) {
+                    item(key = "operation") {
+                        Section {
+                            BasicComponent(title = "正在执行", summary = Messages.phase(state.op.phase))
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
                 when {
+                    page == ConsolePage.About -> item(key = "about") { AboutCard(status) }
                     !state.loaded -> item(key = "loading") { LoadingCard() }
                     status == null -> item(key = "problem") {
                         ProblemCard(state.statusProblem.orEmpty()) { controller.refresh() }
                     }
                     else -> {
-                        item(key = "hotspot") { HotspotCard(state, controller) }
-                        item(key = "settings") { SettingsCard(state, status, controller) { askKey = true } }
-                        item(key = "six") { SixCard(state, status, controller) { confirmSixOff = true } }
-                        item(key = "conditions") { ConditionsCard(status) }
-                        item(key = "more") { MoreCard(status, controller) }
+                        when (page) {
+                            ConsolePage.Home -> {
+                                item(key = "overview") { OverviewCard(state, status) { page = ConsolePage.Diagnostics } }
+                                item(key = "hotspot") { HotspotCard(state, controller) }
+                                item(key = "six") { SixCard(state, status, controller) { confirmSixOff = true } }
+                            }
+                            ConsolePage.Settings -> {
+                                item(key = "settings") { SettingsCard(state, status, controller) { askKey = true } }
+                                item(key = "settings-help") {
+                                    Section { BasicComponent(title = "配置说明", summary = "关闭热点后修改参数，下次开启生效。6GHz 热点需客户端支持对应频段。") }
+                                }
+                            }
+                            ConsolePage.Diagnostics -> {
+                                item(key = "conditions") { ConditionsCard(status) }
+                                item(key = "more") { MoreCard(status, controller) }
+                            }
+                            ConsolePage.About -> Unit
+                        }
                     }
                 }
                 item(key = "footer") { Footer() }
