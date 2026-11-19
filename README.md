@@ -1,6 +1,6 @@
 # MT6639 热点 + 6GHz 二合一源码分支
 
-此分支 `ui-stability-20261119` 独立于 `main`，继承原二合一分支，基于已发布的 **v0.4.2-dijun.1**（`66c931138c13f2319a3d11f9ab6e93ab2d087291`），继续研究四页界面与功能稳定性。它保留完整仓库历史、构建依赖、测试、研究依据与许可证；其他历史研究目录仍保留，但不参与二合一 ZIP 的打包。当前完整安装候选为 **v0.4.3-dijun.1 / code40**，包含新版四页 WebUI 与控制器稳定性修复；后续源码更新不自动改变已发布安装包。
+此分支 `ui-stability-20261119` 独立于 `main`，继承原二合一分支，基于已发布的 **v0.4.2-dijun.1**（`66c931138c13f2319a3d11f9ab6e93ab2d087291`），继续研究四页界面与功能稳定性。它保留完整仓库历史、构建依赖、测试、研究依据与许可证；其他历史研究目录仍保留，但不参与二合一 ZIP 的打包。当前完整安装候选为 **v0.4.4-dijun.1 / code41**，包含新版四页 WebUI 与控制器稳定性修复；后续源码更新不自动改变已发布安装包。
 
 ## 二合一源码入口
 
@@ -24,11 +24,11 @@ git clone --branch ui-stability-20261119 --single-branch \
 cd mt6639-wifi7-dijun
 ```
 
-完整构建步骤、工具链要求和旧模块迁移见 [模块构建说明](modules/mt6639-hotspot/README.md#webui-构建与安装)。主要入口为 `tools/build_mount_txn.sh`、`tools/build_webui.sh` 和 `tools/build_hotspot_module.sh`。构建时将输出 ZIP 名称设为 `mt6639-hotspot-v0.4.3-dijun.1.zip`。
+完整构建步骤、工具链要求和旧模块迁移见 [模块构建说明](modules/mt6639-hotspot/README.md#webui-构建与安装)。主要入口为 `tools/build_mount_txn.sh`、`tools/build_webui.sh` 和 `tools/build_hotspot_module.sh`。构建时将输出 ZIP 名称设为 `mt6639-hotspot-v0.4.4-dijun.1.zip`。
 
 本分支包含项目源码，不包含预编译原生程序、DEX、ZIP、原厂驱动或固件。构建仍需要文档指定的 NDK、JDK、Gradle、字体、外部依赖与固定哈希的热点构建输入；不是无需依赖即可离线编译的 SDK。源码 ZIP 也不能直接作为 KernelSU 模块安装。
 
-- [完整可安装 v0.4.3 ZIP](https://github.com/xiatian410/mt6639-wifi7-dijun/releases/download/v0.4.3-dijun.1/mt6639-hotspot-v0.4.3-dijun.1.zip)
+- [完整可安装 v0.4.4 ZIP](https://github.com/xiatian410/mt6639-wifi7-dijun/releases/download/v0.4.4-dijun.1/mt6639-hotspot-v0.4.4-dijun.1.zip)
 - [本分支源码 ZIP](https://github.com/xiatian410/mt6639-wifi7-dijun/archive/refs/heads/ui-stability-20261119.zip)
 - 原作者署名与 [GPL-3.0 许可证](LICENSE) 保留；第三方许可按各组件原文件。
 

@@ -1,6 +1,6 @@
 id=mt6639-hotspot
 name=MT6639 · 6GHz 与热点二合一
-version=v0.4.3-dijun.1
-versionCode=40
+version=v0.4.4-dijun.1
+versionCode=41
 author=mt6639-dijun
 description=[等待状态] 动态显示热点状态、频段、配置带宽、恢复和最近操作；启动及操作后刷新，默认 worker 约每 30 秒检查。状态检查不代表客户端联网。
